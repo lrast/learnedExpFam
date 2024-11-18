@@ -1,4 +1,4 @@
-\documentclass{article}[10pt]      % use "amsart" instead of "article" for AMSLaTeX format
+\documentclass[10pt, twocolumn]{article}      % use "amsart" instead of "article" for AMSLaTeX format
 \usepackage{geometry}                       % See geometry.pdf to learn the layout options. There are lots.
 \geometry{letterpaper}                          % ... or a4paper or a5paper or ... 
 %\geometry{landscape}                       % Activate for rotated page geometry
@@ -14,7 +14,8 @@
 \usepackage{amsfonts}
 \usepackage{verbatim}
 \usepackage{bm}
-
+\usepackage{multicol}
+\usepackage[switch]{lineno}
 
 \usepackage{tikz}
 \usetikzlibrary{fit,positioning}
@@ -25,17 +26,215 @@
 
 
 \begin{document}
+\title{Learned Cumulant Generating Functions Allow Adaptation of Neural Network Statistics}
+\author{Luke Rast}
+\maketitle
+\linenumbers
 
-\begingroup  
-  \centering
-  \LARGE Title \\[1.5em]
-  \large Luke Rast\par
-\endgroup
+\section{Introduction and Background}
 
 
-\section*{}
+In order to make this paper tight, we must show that the learned CGF solves multiple issues related to adaptation / distribution change.
+We already have
+\begin{enumerate}
+  \item Change point detection via rate function
+\end{enumerate}
 
-\bibliography{BIBNAME}
-\bibliographystyle{plain}
+
+
+While the term `rate function' can have a variety of meanings, through-out this paper, it will always refer to the large-deviations rate function, which we define in detail below.
+
+
+
+
+
+\subsection{Substance Intro}
+
+
+The \textit{moment generating function} (MGF) is given by
+\begin{equation}
+  M(\theta) = \mathbb{E}_x(e^{\theta x}),
+\end{equation}
+the Laplace transform of the probability density function.
+When this function exists, it gives an alternative represention of a probability distribution that is used frequently in probability and statistics [Ref-general MGF].
+One important application of the MGF is for constructing families of \textit{exponentially tilted} probability distributions \cite{morris_natural_1982,morris_unifying_2009}.
+Starting from a baseline distribution $h_0(x)$, with moment generating function $M_0(\theta)$, exponential tilting produces the family
+\begin{equation}
+  p_0(x | \theta) = e^{\theta^T x} \frac{h_0(x)}{M_0(\theta)}.
+\end{equation}
+This is a natural exponential family of distributions, and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
+This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
+
+The logarithm of the MFG is called the \textit{cumulant generating function} (CGF):
+\begin{equation}
+  A(\theta) = \log \mathbb{E}_x[\exp(\theta x)].
+\end{equation}
+This function, if it exists, is guaranteed to be \textit{convex}.
+Paralleling other applications of the Laplace transform [REF-physics uses] the CGF maintains many of the relationships that the MGF has to other quantities, through its Legendre transform [Ref - Legendre]:
+\begin{equation}
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ).
+\end{equation}
+We will take advantage of some of these well-known relationships in this paper.
+
+First, the exponentially tilted distributions become reconizably exponential families
+\begin{equation}
+  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta) ),
+\end{equation}
+and the CGF extends to produce cumulant generating functions for the whole family: $K(t | \theta) = A(\theta + t) - A(\theta)$.
+What's more, because the CGF $A(\theta)$ is convex, the Legendre transform relationship will be a duality, and therefore we have the relationships:
+\begin{eqnarray}
+  \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu).
+\end{eqnarray}
+The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
+Thus, $I(\mu)$ is a function of observation \textit{averages}.
+
+This function appears in large deviations theory \cite{touchette_basic_2012} [one more] as what is called the \textit{rate function} (or more accurately, it's negative).
+\begin{equation}
+  -I(\mu) = \lim_{N \to \infty} \frac{1}{N} \log \left( p \left(\frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \right)
+\end{equation}
+In other words, $I(\mu)$ gives the asymptotic \textit{decay rate}, as we increase the number of samples, of the probability that the empirical mean deviates from the true mean by at least $\mu$.
+\begin{equation}
+  p \left( \frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \approx \exp(-N I(\mu))
+\end{equation}
+This result is known as Cramer's theorem [Ref].
+In this work, we use this as a means of detecting changes in environmental statistics. 
+
+
+
+
+
+\subsection{Previous work}
+
+Given inputs $\bm{x}$ and outputs $y$, we can classify the different types of distribution shift that can occur.
+`Covariate shift' leaves the distribution $p(y|\bm{x})$ unchanged, while $p(x)$ changes: the feature distribution may change, but they way that features generate labels is unchanged
+`Label shift' leaves $p(\bm{x}|y)$ fixed while $p(y)$ changes: the prevalence of different labels may change, but the signatures of the labels are unchanged.
+Meanwhile, `concept drift' leaves the one (or both) of the marginal distributions unchanged, while the conditional distribution changes.
+
+\cite{lipton_detecting_2018}: label shift detection by detecting changes in the distribution of predictions (via KS test).
+The prediction distributions before / after a shift are used as importance weights in an empirical risk minimization.
+In other words, the loss function is weighted by the relative prevalence of a given label.
+Has some good experimental approaches to generate label shifts.
+
+
+\cite{namkoong_minimax_2024}: defines a notion of the `stability' of a model under distribution shifts:
+\begin{equation}
+  I_y(P) = \min_Q \{D_{kl}(Q | P) | \mathbb{E}_Q[R] \ge y  \}
+\end{equation}
+here $R \sim P$ is the loss distribution of a model, and $y$ is a threshold value of loss.
+So, the metric is to find the \textit{closest} distribution of outputs KL-wise that exceeds acceptable losses.
+The goal here is to predict which models will fail on novel datasets by examining their performance distributions....
+If $R$ is distributed according to $P$, then $I_y(P)$ is the large deviations rate function (as a function of $y$).
+
+\cite{guggilam_anomaly_2021}: Large deviations approach to anomaly detection. Uses some sort of projection approach to compute the rate function. Uses threshold applied to the rate function as an anomaly detection approach.
+
+\cite{rabanser_failing_2019}: tests of different methods for detecting shifts.
+
+
+
+Previous works on exponential tilting
+- finance
+- ML
+
+What is the connection to previous free energy based approaches?
+
+
+
+\section{Results}
+
+Learn cumulant generating function (CGF)
+\begin{equation}
+  A(\theta) = \log \mathbb{E}_x[\exp(\theta x)]
+\end{equation}
+for the activity of neural on a network, as a means to capture the statistics of these layers.
+
+
+\subsection{Learned moment generating function}
+
+The cumulant generating function is constrained to be a convex function of its argument, $\theta$.
+We learn the cumulant generating function by training an input convex neural network (ICNN) \cite{amos_input_2017}, guaranteed to be convex, to reproduce the empirical cumulant generating function
+\begin{equation}
+  \hat A(\theta) = \log \sum_{x_i} \exp(\theta x),
+\end{equation}
+which is frequently used as a estimator for the CGF \cite{duffield_entropy_1995} [others]. 
+
+
+Question: how many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction due to 
+
+
+\subsection{Change point detection}
+The cumulant generating function, $A(\theta)$ can be used to detect changes in the statistics of the network layers by taking advantage of tools from large deviations theory \cite{touchette_basic_2012} [others], which analyzes the decay behavior of the tails of distributions of sample averages.
+The connection is made through Cramer's theorem [ref], which states that the large deviations \textit{rate function}
+\begin{equation}
+  I(x) = \lim_{n \to \infty} \frac{1}{n} \log \left( p \left( \sum_{i=1}^n X_i \ge n x \right) \right)
+\end{equation}
+is the negative of the Legendre transform of the cumulant generating function
+\begin{equation}
+  -I(x) = \sup_{\theta}( \theta x - A(\theta) ).
+\end{equation}
+In other words, we can use the Legendre transform to approximate cumulative distribution function of averages
+\begin{equation}
+  p \left( \frac{1}{n} \sum_{i=1}^n X_i \ge x \right) \approx \exp(-n I(x))
+\end{equation}
+Averaging enough data points will allow us to determine whether the network activity follows the same statistics as the training data using either element-wise test on each dimension, as in \cite{rabanser_failing_2019} or a joint test on the all dimensions simultaneously.
+
+
+Steps:
+\begin{enumerate}
+  \item Compute Legendre transforms
+  \item Empirical path-independence of Legendre transforms
+  \item Use for change-point detection
+  \item Compare sensitivity
+\end{enumerate}
+
+
+
+\subsection{Exponential tilting}
+Given a learned cumulant generating function, $A(\theta)$ and an estimate of the density $h(T)$, we can use what is called `exponential tilting' \cite{morris_natural_1982,morris_unifying_2009} to construct a natural exponential family of distributions using this function as the base measure by:
+\begin{equation}
+  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta)).
+\end{equation}
+This gives us parameterized family of distributions with parameter $\theta$, and cumulant generating functions $C(t) = A(\theta +t) - A(\theta)$.
+The Fisher information matrix for this family is given by the Hessian of $A(\theta)$ 
+\begin{equation}
+  I(\theta) = \bm{H}_\theta A(\theta) 
+\end{equation}
+
+Steps / questions:
+\begin{enumerate}
+  \item How does exponential tilting act on the distribution?
+  \item Does this capture the distribution given a particular value of the stimulus?
+  \item What about if we construct a circle through the activity space?
+  \item Use for Bayesian inference.
+\end{enumerate}
+
+
+
+\subsection{Measurement of Fisher Information}
+
+Establish the method for measuring the Fisher information of data. In particular, with respect to changes in a known parameter, which can be trained.
+
+
+
+
+\section{Methods}
+\subsection{Computation of the rate function}
+The large deviations rate function is given by
+\begin{equation}
+  -I(x) = \sup_{\theta}( \theta x - A(\theta) )
+\end{equation}
+In order to evaluate this function we can either:
+\begin{enumerate}
+  \item Solve the optimization problem
+  \item Use a differential equation based approach.
+\end{enumerate}
+
+
+
+
+\section{Discussion}
+
+
+\bibliography{main.bib}
+\bibliographystyle{ieeetr}
 
 \end{document}
