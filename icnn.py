@@ -3,8 +3,13 @@ import numpy as np
 import pytorch_lightning as pl
 
 from torch import nn
-from torch.nn.parameter import Parameter
+from torch._prims_common import validate_idx
+from torch.nn import Parameter
+
 from torch.utils.data import TensorDataset, DataLoader, random_split
+
+from torch.func import vmap, jacrev, hessian
+
 
 from scipy.stats import multivariate_normal
 
@@ -16,7 +21,7 @@ class CGF_ICNN(pl.LightningModule):
     def __init__(self, data_to_model, **kwargs):
         super(CGF_ICNN, self).__init__()
 
-        self.data = torch.tensor(data_to_model, dtype=torch.float32)
+        self.data = data_to_model.clone().detach()
 
         hyperparameterValues = {
             'inputDim': 2,
@@ -30,28 +35,82 @@ class CGF_ICNN(pl.LightningModule):
 
         self.initialLayer = nn.Linear(self.hparams.inputDim, self.hparams.hiddenDims[0])
 
+        internal_widths = self.hparams.hiddenDims + (1,)
         self.internalLayers = nn.ModuleList([
-                PositiveLinear(self.hparams.hiddenDims[0], self.hparams.hiddenDims[1]),
-                PositiveLinear(self.hparams.hiddenDims[1], 1)
+                PositiveLinear(internal_widths[i], internal_widths[i+1])
+                for i in range(len(internal_widths) - 1)
             ])
 
+        shortcut_outputs = self.hparams.hiddenDims[1:] + (1,)
         self.shortcutLayers = nn.ModuleList([
-                nn.Linear(self.hparams.inputDim, self.hparams.hiddenDims[1]),
-                nn.Linear(self.hparams.inputDim, 1)
+                nn.Linear(self.hparams.inputDim, output_size)
+                for output_size in shortcut_outputs
             ])
 
         self.nlin = nn.CELU()
         self.lossFn = nn.MSELoss()
 
-    def forward(self, y):
+    def forward(self, y, scalar_outs=False):
         z = self.initialLayer(y)
 
         for i in range(len(self.internalLayers)):
             z = self.internalLayers[i](z) + self.shortcutLayers[i](y)
             z = self.nlin(z)
 
+        if scalar_outs:
+            return z.sqeeze()
         return z
 
+    # primal functions
+    def fwd_cpu(self, xs):
+        xs = torch.as_tensor(xs, dtype=torch.float32, device=self.device)
+        return self.forward(xs).cpu()
+
+    def jac(self, ts):
+        """ Jacobian of the network """
+        J = vmap(jacrev(self.fwd_cpu))
+        return J(ts)[:, 0, :]
+
+    def hess(self, ts):
+        """Hessian of the network """
+        H = vmap(hessian(self.fwd_cpu))
+        return H(ts)[:, 0, :, :]
+
+    # dual functions
+    def dual_opt(self, p, optim_method=torch.optim.Adam):
+        """
+            Solve the dual optimization problem.
+
+            Note that issues will arise if the desired slope is not achieved
+            by the CGF
+        """
+        def to_minimize(x):
+            return -(torch.einsum('Nk, Nk -> N', p, x) - self.fwd_cpu(x).squeeze())
+
+        input_val = Parameter(torch.zeros(p.shape))
+        optimizer = optim_method((input_val,), lr=1)
+        
+        for step in range(200):
+            curr_val = optimizer.param_groups[0]['params'][0]
+            optimizer.zero_grad()
+            
+            out = to_minimize(curr_val).sum()
+            out.backward()
+            optimizer.step()
+
+        x_val = optimizer.param_groups[0]['params'][0].data
+        
+        return x_val, -to_minimize(x_val)
+
+    def inv_jac(self, p, **kwargs):
+        x, _ = self.dual_opt(p, **kwargs)
+        return x
+
+    def dual_function(self, p, **kwargs):
+        _, values = self.dual_opt(p, **kwargs)
+        return values
+
+    # training 
     def training_step(self, batch, batchidx):
         xs, ys = batch
 
@@ -67,15 +126,18 @@ class CGF_ICNN(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
+    # Manage data
     def setup(self, stage=None):
         """ Generate samples of the empirical moment generating function
             for our dataset.
         """
 
-        def make_CGF(ts, data):
+        def empirical_CGF(ts, data):
             """ compute empirical CGF """
-            outs = torch.exp(data @ ts.T).mean(axis=0)
-            return torch.log(outs)
+            num_points = torch.tensor(data.shape[0])
+
+            outs = torch.logsumexp(data @ ts.T, 0) - torch.log(num_points)
+            return outs
 
         # first, we need to determine the t values that we want to sample. 
         N_dims = self.data.shape[1]
@@ -97,15 +159,13 @@ class CGF_ICNN(pl.LightningModule):
             data_max = self.data[:, n_axis].max()
 
             width = 1
-            while width < 10:
+            while width < 10:  # is 10 actually a reasonable maximum value?
                 ax_vals = torch.linspace(-width, width, 50+10*width)
                 ts = axis_samples(ax_vals)
-                CGF_vals = make_CGF(ts, self.data)
+                CGF_vals = empirical_CGF(ts, self.data)
 
                 min_slope = (CGF_vals[1] - CGF_vals[0]) / (ax_vals[1] - ax_vals[0])
                 max_slope = (CGF_vals[-1] - CGF_vals[-2]) / (ax_vals[-1] - ax_vals[-2])
-
-                #print(width, min_slope, max_slope)
 
                 stop = True
                 if min_slope / data_min < fraction:
@@ -129,10 +189,11 @@ class CGF_ICNN(pl.LightningModule):
                                                     ).rvs(1000*N_dims),
                                 dtype=torch.float32
                              )
+
         if N_dims == 1:  # edge case
             self.ts = self.ts[:, None]
 
-        self.CGFs = make_CGF(self.ts, self.data)[:, None]
+        self.CGFs = empirical_CGF(self.ts, self.data)[:, None]
 
         # set up the datasets
         full_dataset = TensorDataset(self.ts, self.CGFs)
@@ -189,4 +250,3 @@ class ICN_layer(nn.Module):
 
     def forward(self, x, original):
         return self.internal(x) + self.shortcut(original), original
-
