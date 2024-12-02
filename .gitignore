@@ -3,3 +3,5 @@
 __pycache__
 wandb
 buildFiles_latex
+**.csv
+trainedParameters
