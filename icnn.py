@@ -3,13 +3,13 @@ import numpy as np
 import pytorch_lightning as pl
 
 from torch import nn
-from torch._prims_common import validate_idx
 from torch.nn import Parameter
 
+from torch.nn.functional import leaky_relu
 from torch.utils.data import TensorDataset, DataLoader, random_split
-
 from torch.func import vmap, jacrev, hessian
 
+from convex_initialization import ConvexLinear
 
 from scipy.stats import multivariate_normal
 
@@ -24,42 +24,82 @@ class CGF_ICNN(pl.LightningModule):
         self.data = data_to_model.clone().detach()
 
         hyperparameterValues = {
+            # seed
+            'seed': torch.random.seed(),
+            # architecture
             'inputDim': 2,
-            'hiddenDims': (10, 6),
+            'hidden_dims': (200, 200, 200, 10),
+
+            # training
             'lr': 1E-3,
-            'batchsize': 32,
-            'patience': 50
+            'batchsize': 128,
+            'patience': 100,
+            'bias_noise': 0.5,
+
+            # training data
+            'numsamples': 2000,
+            'variance': None,
+            'testmode': False,
+
+            # to implement
+            'skipconnections': False,
+            'dropout': 0.0
         }
         hyperparameterValues.update(kwargs)
         self.save_hyperparameters(hyperparameterValues, ignore=['data_to_model'])
 
-        self.initialLayer = nn.Linear(self.hparams.inputDim, self.hparams.hiddenDims[0])
+        torch.manual_seed(self.hparams.seed)
+        np.random.seed(self.hparams.seed % (2**32-1))
 
-        internal_widths = self.hparams.hiddenDims + (1,)
-        self.internalLayers = nn.ModuleList([
-                PositiveLinear(internal_widths[i], internal_widths[i+1])
-                for i in range(len(internal_widths) - 1)
-            ])
+        if self.hparams.skipconnections:
+            raise NotImplementedError('Skip connections are not implemented')
+        if self.hparams.dropout:
+            raise NotImplementedError('Dropout is not implemented')
 
-        shortcut_outputs = self.hparams.hiddenDims[1:] + (1,)
-        self.shortcutLayers = nn.ModuleList([
-                nn.Linear(self.hparams.inputDim, output_size)
-                for output_size in shortcut_outputs
-            ])
+        if self.hparams.testmode:
+            self.model = nn.Sequential(
+                    nn.Linear(self.hparams.inputDim, 200),
+                    LeakySoftplus(),
+                    ConvexLinear(200, 200, bias_noise=self.hparams.bias_noise),
+                    LeakySoftplus(),
+                    ConvexLinear(200, 200, bias_noise=self.hparams.bias_noise),
+                    LeakySoftplus(),
+                    ConvexLinear(200, 1, bias_noise=self.hparams.bias_noise)
+                )
 
-        self.nlin = nn.CELU()
+        else:
+            self.initial_layer = nn.Linear(self.hparams.inputDim,
+                                           self.hparams.hidden_dims[0])
+
+            in_sizes = self.hparams.hidden_dims
+            out_sizes = self.hparams.hidden_dims[1:] + (1,)
+
+            self.positive_layers = nn.ModuleList([
+                    ConvexLinear(in_sizes[i], out_sizes[i],
+                                 convex_init=True,
+                                 bias_noise=self.hparams.bias_noise,
+                                 )
+                    for i in range(len(in_sizes))
+                ])
+
+            self.nlin = nn.LeakySoftplus()
+
         self.lossFn = nn.MSELoss()
 
-    def forward(self, y, scalar_outs=False):
-        z = self.initialLayer(y)
+    def forward(self, x, scalar_outs=False):
+        if self.hparams.testmode:
+            return self.model(x)
 
-        for i in range(len(self.internalLayers)):
-            z = self.internalLayers[i](z) + self.shortcutLayers[i](y)
-            z = self.nlin(z)
+        else:
+            z = self.initial_layer(x)
 
-        if scalar_outs:
-            return z.sqeeze()
-        return z
+            for positive_layer in self.positive_layers:
+                z = self.nlin(z)
+                z = positive_layer(z)
+
+            if scalar_outs:
+                return z.sqeeze()
+            return z
 
     # primal functions
     def fwd_cpu(self, xs):
@@ -127,17 +167,17 @@ class CGF_ICNN(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
     # Manage data
+    def empirical_CGF(self, ts):
+        """ compute empirical CGF """
+        num_points = torch.tensor(self.data.shape[0])
+
+        outs = torch.logsumexp(self.data @ ts.T, 0) - torch.log(num_points)
+        return outs
+
     def setup(self, stage=None):
         """ Generate samples of the empirical moment generating function
             for our dataset.
         """
-
-        def empirical_CGF(ts, data):
-            """ compute empirical CGF """
-            num_points = torch.tensor(data.shape[0])
-
-            outs = torch.logsumexp(data @ ts.T, 0) - torch.log(num_points)
-            return outs
 
         # first, we need to determine the t values that we want to sample. 
         N_dims = self.data.shape[1]
@@ -162,7 +202,7 @@ class CGF_ICNN(pl.LightningModule):
             while width < 10:  # is 10 actually a reasonable maximum value?
                 ax_vals = torch.linspace(-width, width, 50+10*width)
                 ts = axis_samples(ax_vals)
-                CGF_vals = empirical_CGF(ts, self.data)
+                CGF_vals = self.empirical_CGF(ts)
 
                 min_slope = (CGF_vals[1] - CGF_vals[0]) / (ax_vals[1] - ax_vals[0])
                 max_slope = (CGF_vals[-1] - CGF_vals[-2]) / (ax_vals[-1] - ax_vals[-2])
@@ -179,27 +219,54 @@ class CGF_ICNN(pl.LightningModule):
 
             return width
 
-        dim_variances = []
-        for dim in range(N_dims):
-            width = search_width(dim)
-            dim_variances.append((width/1.5)**2)  # width is two standard deviations
+        if self.hparams.variance is None:
+            dim_variances = []
+            for dim in range(N_dims):
+                width = search_width(dim)
+                dim_variances.append((width/1.5)**2)  # width is two standard deviations
+        else:
+            dim_variances = [self.hparams.variance, self.hparams.variance]
 
         self.ts = torch.tensor(
                                 multivariate_normal(np.zeros(N_dims), np.diag(dim_variances)
-                                                    ).rvs(1000*N_dims),
+                                                    ).rvs(self.hparams.numsamples),
                                 dtype=torch.float32
                              )
 
         if N_dims == 1:  # edge case
             self.ts = self.ts[:, None]
 
-        self.CGFs = empirical_CGF(self.ts, self.data)[:, None]
+        self.CGFs = self.empirical_CGF(self.ts)[:, None]
 
         # set up the datasets
         full_dataset = TensorDataset(self.ts, self.CGFs)
         l = len(full_dataset)
         self.train_split, self.val_split = random_split(
-            full_dataset, (8*l//10, 2*l//10))
+            full_dataset, (0.8, 0.2))
+
+    # alternative training data.
+    def target(self, ts):
+        """ compute value of the target function"""
+        return (ts**2).sum(1)[:, None]
+
+    def setup_simple(self, stage=None):
+        """ Generate samples of the empirical moment generating function
+            for our dataset.
+        """
+
+        # first, we need to determine the t values that we want to sample.
+        N_dims = 2
+
+        self.ts = 1.0**0.5 * torch.randn((self.hparams.numsamples, N_dims))
+
+        if N_dims == 1:  # edge case
+            self.ts = self.ts[:, None]
+
+        self.CGFs = self.target(self.ts)
+
+        # set up the datasets
+        full_dataset = TensorDataset(self.ts, self.CGFs)
+        self.train_split, self.val_split = random_split(full_dataset, (0.8, 0.2))
 
     def train_dataloader(self):
         return DataLoader(self.train_split,
@@ -215,6 +282,24 @@ class CGF_ICNN(pl.LightningModule):
                           num_workers=2,
                           persistent_workers=True
                           )
+
+
+class LeakySoftplus(nn.Module):
+    """ Smooth softplus version of the leaky ReLU
+        negative_slope: slope of the negative component
+        offset: sets intercept of the function. Defualt sets intercept to zero
+    """
+    def __init__(self, negative_slope=0.05, offset=-0.6931):
+        super(LeakySoftplus, self).__init__()
+        self.negative_slope = negative_slope
+        alpha = negative_slope
+        offset = (1 - alpha) * offset
+
+        sp = torch.nn.Softplus()
+        self.leaky_softplus = lambda x: alpha * x + (1-alpha) * sp(x) + offset
+
+    def forward(self, xs):
+        return self.leaky_softplus(xs)
 
 
 class PositiveLinear(nn.Module):
@@ -237,16 +322,3 @@ class PositiveLinear(nn.Module):
 
     def forward(self, x):
         return nn.functional.linear(x, self.nonLin(self.weight))
-
-
-class ICN_layer(nn.Module):
-    """ individual layer of an ICNN.
-        passes forward the input values 
-    """
-    def __init__(self, input_size, pre_size, post_size):
-        super(ICN_layer, self).__init__()
-        self.internal = nn.Linear(pre_size, post_size)
-        self.shortcut = nn.Linear(input_size, post_size)
-
-    def forward(self, x, original):
-        return self.internal(x) + self.shortcut(original), original
