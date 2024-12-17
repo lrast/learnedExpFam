@@ -1,8 +1,27 @@
+% ICNN
 @article{amos_input_2017,
     title = {Input {Convex} {Neural} {Networks}},
     journal = {ICML},
     author = {Amos, Brandon and Xu, Lei and Kolter, J Zico},
     year = {2017},
+}
+@inproceedings{hoedt_principled_2023,
+    title = {Principled weight initialisation for input-convex neural networks},
+    volume = {36},
+    url = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/9062b7d6e522dadf4f7d85d49b60d81e-Abstract-Conference.html},
+    urldate = {2024-11-28},
+    booktitle = {Advances in {Neural} {Information} {Processing} {Systems}},
+    author = {Hoedt, Pieter-Jan and Klambauer, Günter},
+    year = {2023},
+}
+
+
+%large deviations
+@book{dembo2009large,
+  title={Large deviations techniques and applications},
+  author={Dembo, Amir and Zeitouni, Ofer},
+  year={2010},
+  publisher={Springer}
 }
 @misc{touchette_basic_2012,
     title = {A basic introduction to large deviations: {Theory}, applications, simulations},
@@ -14,7 +33,7 @@
     author = {Touchette, Hugo},
     month = feb,
     year = {2012},
-    note = {arXiv:1106.4146 [cond-mat, physics:math-ph]},
+    note = {arXiv:1106.4146},
 }
 
 @article{duffield_entropy_1995,
@@ -33,6 +52,30 @@
     note = {Conference Name: IEEE Journal on Selected Areas in Communications},
     pages = {981--990},
 }
+@misc{guggilam_anomaly_2021,
+    title = {Anomaly {Detection} for {High}-{Dimensional} {Data} {Using} {Large} {Deviations} {Principle}},
+    url = {http://arxiv.org/abs/2109.13698},
+    urldate = {2024-10-24},
+    publisher = {arXiv},
+    author = {Guggilam, Sreelekha and Chandola, Varun and Patra, Abani},
+    month = sep,
+    year = {2021},
+    note = {arXiv:2109.13698},
+    keywords = {Computer Science - Machine Learning, Statistics - Machine Learning},
+}
+
+
+% exponential tilting
+@inproceedings{maity_understanding_2023,
+    title = {Understanding new tasks through the lens of training data via exponential tilting},
+    url = {http://arxiv.org/abs/2205.13577},
+    doi = {10.48550/arXiv.2205.13577},
+    urldate = {2024-12-06},
+    booktitle = {The {International} {Conference} on {Learning} {Representation}},
+    publisher = {arXiv},
+    author = {Maity, Subha and Yurochkin, Mikhail and Banerjee, Moulinath and Sun, Yuekai},
+    year = {2023},
+}
 @article{morris_natural_1982,
     title = {Natural {Exponential} {Families} with {Quadratic} {Variance} {Functions}},
     journal = {The Annals of Statistics},
@@ -40,7 +83,6 @@
     year = {1982},
     file = {Attachment:/Users/luke/Zotero/storage/TKR9M4YD/1176345690.pdf:application/pdf},
 }
-
 @article{morris_unifying_2009,
     title = {Unifying the {Named} {Natural} {Exponential} {Families} and {Their} {Relatives}},
     volume = {63},
@@ -57,70 +99,8 @@
 }
 
 
+
 % literature survey
-@inproceedings{lipton_detecting_2018,
-    title = {Detecting and {Correcting} for {Label} {Shift} with {Black} {Box} {Predictors}},
-    url = {https://proceedings.mlr.press/v80/lipton18a.html},
-    language = {en},
-    urldate = {2024-10-24},
-    booktitle = {Proceedings of the 35th {International} {Conference} on {Machine} {Learning}},
-    publisher = {PMLR},
-    author = {Lipton, Zachary and Wang, Yu-Xiang and Smola, Alexander},
-    month = jul,
-    year = {2018},
-    note = {ISSN: 2640-3498},
-    pages = {3122--3130},
-}
-@incollection{amos_when_2008,
-    title = {When {Training} and {Test} {Sets} {Are} {Different}: {Characterizing} {Learning} {Transfer}},
-    isbn = {978-0-262-17005-5},
-    shorttitle = {When {Training} and {Test} {Sets} {Are} {Different}},
-    url = {https://doi.org/10.7551/mitpress/9780262170055.003.0001},
-    urldate = {2024-10-24},
-    booktitle = {Dataset {Shift} in {Machine} {Learning}},
-    publisher = {The MIT Press},
-    author = {Amos, Storkey},
-    editor = {Quiñonero-Candela, Joaquin and Sugiyama, Masashi and Schwaighofer, Anton and Lawrence, Neil D.},
-    month = dec,
-    year = {2008},
-    doi = {10.7551/mitpress/9780262170055.003.0001},
-    pages = {0},
-}
-
-@article{gretton_covariate_2008,
-    title = {Covariate {Shift} by {Kernel} {Mean} {Matching}},
-    url = {https://direct.mit.edu/books/edited-volume/3841/chapter/125883/Covariate-Shift-by-Kernel-Mean-Matching},
-    doi = {10.7551/mitpress/7921.003.0013},
-    language = {en},
-    urldate = {2024-10-25},
-    author = {Gretton, Arthur and Smola, Alex and Huang, Jiayuan and Schmittfull, Marcel and Borgwardt, Karsten and Schölkopf, Bernhard},
-    month = dec,
-    year = {2008},
-}
-
-@misc{namkoong_minimax_2024,
-    title = {Minimax {Optimal} {Estimation} of {Stability} {Under} {Distribution} {Shift}},
-    url = {http://arxiv.org/abs/2212.06338},
-    doi = {10.48550/arXiv.2212.06338},
-    urldate = {2024-09-30},
-    publisher = {arXiv},
-    author = {Namkoong, Hongseok and Ma, Yuanzhe and Glynn, Peter W.},
-    month = jun,
-    year = {2024},
-    note = {arXiv:2212.06338 [cs, stat]},
-    keywords = {Computer Science - Machine Learning, Statistics - Machine Learning},
-}
-@misc{guggilam_anomaly_2021,
-    title = {Anomaly {Detection} for {High}-{Dimensional} {Data} {Using} {Large} {Deviations} {Principle}},
-    url = {http://arxiv.org/abs/2109.13698},
-    urldate = {2024-10-24},
-    publisher = {arXiv},
-    author = {Guggilam, Sreelekha and Chandola, Varun and Patra, Abani},
-    month = sep,
-    year = {2021},
-    note = {arXiv:2109.13698},
-    keywords = {Computer Science - Machine Learning, Statistics - Machine Learning},
-}
 @inproceedings{rabanser_failing_2019,
     title = {Failing {Loudly}: {An} {Empirical} {Study} of {Methods} for {Detecting} {Dataset} {Shift}},
     volume = {32},
@@ -131,4 +111,14 @@
     publisher = {Curran Associates, Inc.},
     author = {Rabanser, Stephan and Günnemann, Stephan and Lipton, Zachary},
     year = {2019},
+}
+@inproceedings{kingma_auto-encoding_2013,
+    title = {Auto-{Encoding} {Variational} {Bayes}},
+    url = {http://arxiv.org/abs/1312.6114},
+    doi = {10.1051/0004-6361/201527329},
+    booktitle = {{ICLR}},
+    author = {Kingma, Diederik P and Welling, Max},
+    year = {2013},
+    pmid = {23459267},
+    pages = {1--14},
 }

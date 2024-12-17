@@ -1,4 +1,4 @@
-\documentclass[10pt, twocolumn]{article}      % use "amsart" instead of "article" for AMSLaTeX format
+\documentclass[10pt]{article}      % use "amsart" instead of "article" for AMSLaTeX format
 \usepackage{geometry}                       % See geometry.pdf to learn the layout options. There are lots.
 \geometry{letterpaper}                          % ... or a4paper or a5paper or ... 
 %\geometry{landscape}                       % Activate for rotated page geometry
@@ -22,8 +22,8 @@
 
 \newcommand{\cov}{\mathrm{cov}}
 
-%\usepackage{minted}
-
+\usepackage{setspace}
+\doublespacing
 
 \begin{document}
 \title{Learned Cumulant Generating Functions Allow Adaptation of Neural Network Statistics}
@@ -31,10 +31,18 @@
 \maketitle
 \linenumbers
 
+
+\section{Abstract}
+
+
+
+
+
+
 \section{Introduction and Background}
 
 
-
+The cumulant generating function has properties that place it at the heart of change detection and adaptation.
 
 
 
@@ -43,6 +51,7 @@ In order to make this paper tight, we must show that the learned CGF solves mult
 We already have
 \begin{enumerate}
   \item Change point detection via rate function
+  \item adaptation through training on tilted distribution
 \end{enumerate}
 
 
@@ -61,26 +70,26 @@ In this work, we use learned moment generating functions to track neural network
 
 The \textit{moment generating function} (MGF) is given by
 \begin{equation}
-  M(\theta) = \mathbb{E}_x(e^{\theta x}),
+  M(\theta) = \mathbb{E}_x(e^{\theta x}), \label{def:MGF}
 \end{equation}
 the Laplace transform of the probability density function.
 When this function exists, it gives an alternative represention of a probability distribution that is used frequently in probability and statistics [Ref-general MGF].
 One important application of the MGF is for constructing families of \textit{exponentially tilted} probability distributions \cite{morris_natural_1982,morris_unifying_2009}.
 Starting from a baseline distribution $h_0(x)$, with moment generating function $M_0(\theta)$, exponential tilting produces the family
 \begin{equation}
-  p_0(x | \theta) = e^{\theta^T x} \frac{h_0(x)}{M_0(\theta)}.
+  p_0(x | \theta) = e^{\theta^T x} \frac{h_0(x)}{M_0(\theta)}. \label{def:exponential_tilt}
 \end{equation}
 This is a natural exponential family of distributions, and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
 This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
 
 The logarithm of the MFG is called the \textit{cumulant generating function} (CGF):
 \begin{equation}
-  A(\theta) = \log \mathbb{E}_x[\exp(\theta x)].
+  A(\theta) = \log \mathbb{E}_x[\exp(\theta x)]. \label{def:cgf}
 \end{equation}
 This function, if it exists, is guaranteed to be \textit{convex}.
 Paralleling other applications of the Laplace transform [REF-physics uses] the CGF maintains many of the relationships that the MGF has to other quantities, through its Legendre transform [Ref - Legendre]:
 \begin{equation}
-  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ).
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
 \end{equation}
 We will take advantage of some of these well-known relationships in this paper.
 
@@ -91,12 +100,12 @@ First, the exponentially tilted distributions become reconizably exponential fam
 and the CGF extends to produce cumulant generating functions for the whole family: $K(t | \theta) = A(\theta + t) - A(\theta)$.
 What's more, because the CGF $A(\theta)$ is convex, the Legendre transform relationship will be a duality, and therefore we have the relationships:
 \begin{eqnarray}
-  \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu).
+  \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu). \label{eq:duality_relations}
 \end{eqnarray}
 The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
 Thus, $I(\mu)$ is a function of observation \textit{averages}.
 
-This function appears in large deviations theory \cite{touchette_basic_2012} [one more] as what is called the \textit{rate function} (or more accurately, it's negative).
+This function appears in large deviations theory \cite{dembo2009large,touchette_basic_2012} as what is called the \textit{rate function} (or more accurately, it's negative).
 \begin{equation}
   -I(\mu) = \lim_{N \to \infty} \frac{1}{N} \log \left( p \left(\frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \right)
 \end{equation}
@@ -104,8 +113,27 @@ In other words, $I(\mu)$ gives the asymptotic \textit{decay rate}, as we increas
 \begin{equation}
   p \left( \frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \approx \exp(-N I(\mu))
 \end{equation}
-This result is known as Cramer's theorem [Ref].
+This result is known as Cramer's theorem \cite{dembo2009large}.
 In this work, we use this as a means of detecting changes in environmental statistics. 
+
+
+\subsubsection{Large Deviations rewrite}
+% written after I studied the large deviations theory
+
+The theory of large deviations \cite{dembo2009large,touchette_basic_2012} describes the rate at which rare events become more and more unlikely as we collect more samples. 
+So, for a series of probability measures, $p_n$, large deviations theory gives a \textit{rate function}, $I(x)$ that, loosely speaking, satisfies
+\begin{equation}
+  p_n(x \in \Gamma) \sim \exp \left( - n \min_{x \in \Gamma} I(x) \right) \quad \textrm{as} \quad n \to \infty
+\end{equation}
+for any measurable set $\Gamma$.
+That is, the probability of outcomes in the set $\Gamma$ shrinks exponentially with $n$ at a rate that is dominated by the smallest value of $I(x)$ on the set $\Gamma$ (see \cite{dembo2009large} for more precise expressions).
+In particular, if we consider the average $\mu_n = \frac{1}{n} \sum_{i=1}^n X_i$ of $n$ i.i.d. data points $X_i$ in $\mathbb{R}^n$, the large deviations theory provides a refinement of the law of large numbers and the central limit theorem, through Cramer's theorem \cite{dembo2009large} (for $\mathbb{R}^n$), which states that the rate function is given by
+\begin{equation}
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
+\end{equation}
+That is, the rate function is the Legendre transform of the cumulant generating function.
+
+
 
 
 
@@ -113,31 +141,7 @@ In this work, we use this as a means of detecting changes in environmental stati
 
 \subsection{Previous work}
 
-Given inputs $\bm{x}$ and outputs $y$, we can classify the different types of distribution shift that can occur.
-`Covariate shift' leaves the distribution $p(y|\bm{x})$ unchanged, while $p(x)$ changes: the feature distribution may change, but they way that features generate labels is unchanged
-`Label shift' leaves $p(\bm{x}|y)$ fixed while $p(y)$ changes: the prevalence of different labels may change, but the signatures of the labels are unchanged.
-Meanwhile, `concept drift' leaves the one (or both) of the marginal distributions unchanged, while the conditional distribution changes.
-
-\cite{lipton_detecting_2018}: label shift detection by detecting changes in the distribution of predictions (via KS test).
-The prediction distributions before / after a shift are used as importance weights in an empirical risk minimization.
-In other words, the loss function is weighted by the relative prevalence of a given label.
-Has some good experimental approaches to generate label shifts.
-
-
-\cite{namkoong_minimax_2024}: defines a notion of the `stability' of a model under distribution shifts:
-\begin{equation}
-  I_y(P) = \min_Q \{D_{kl}(Q | P) | \mathbb{E}_Q[R] \ge y  \}
-\end{equation}
-here $R \sim P$ is the loss distribution of a model, and $y$ is a threshold value of loss.
-So, the metric is to find the \textit{closest} distribution of outputs KL-wise that exceeds acceptable losses.
-The goal here is to predict which models will fail on novel datasets by examining their performance distributions....
-If $R$ is distributed according to $P$, then $I_y(P)$ is the large deviations rate function (as a function of $y$).
-
-\cite{guggilam_anomaly_2021}: Large deviations approach to anomaly detection. Uses some sort of projection approach to compute the rate function. Uses threshold applied to the rate function as an anomaly detection approach.
-
-\cite{rabanser_failing_2019}: tests of different methods for detecting shifts.
-
-
+Previous works on 
 
 Previous works on exponential tilting
 - finance
@@ -166,7 +170,7 @@ We learn the cumulant generating function by training an input convex neural net
 which is frequently used as a estimator for the CGF \cite{duffield_entropy_1995} [others]. 
 
 
-Question: how many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction due to 
+Question: how many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction by the neural network features.
 
 
 \subsection{Change point detection}
@@ -217,6 +221,25 @@ Steps / questions:
 
 
 
+\subsection{Adaptation Through Fine tuning}
+
+
+
+
+
+\subsection{Target conditional CGF}
+
+
+
+
+
+\subsection{Adaptation Through Activity Remapping}
+
+
+
+
+
+
 \subsection{Measurement of Fisher Information}
 
 Establish the method for measuring the Fisher information of data. In particular, with respect to changes in a known parameter, which can be trained.
@@ -224,22 +247,38 @@ Establish the method for measuring the Fisher information of data. In particular
 
 
 
-\section{Methods}
-\subsection{Computation of the rate function}
-The large deviations rate function is given by
-\begin{equation}
-  -I(x) = \sup_{\theta}( \theta x - A(\theta) )
-\end{equation}
-In order to evaluate this function we can either:
-\begin{enumerate}
-  \item Solve the optimization problem
-  \item Use a differential equation based approach.
-\end{enumerate}
-
-
-
-
 \section{Discussion}
+
+Learning an exponential family by learning sufficient statistic $T(x)$ and the base measure $h(x)$, here we use the features learned by a pre-trained neural network as sufficient statistics, and capture their distribution with learned moment generating function $A(\theta)$.
+
+Future direction: learning $T(x)$ together with sufficient statistics.
+
+Connection to VAEs \cite{kingma_auto-encoding_2013}: inner vs outer relaxation of inference.
+VAEs learn to perform approximate inference with specified noise and latent variable distributions, while the approach here performs exact inference using learned noise distributions and their conjugates. 
+
+
+\section{Methods}
+\subsection{Network architecture}
+
+We fit the empirical cumulant generating functions using input convex neural networks \cite{amos_input_2017}, which are guaranteed to learn convex functions.
+We use a multi-layer perceptron with no skip connections, but with positive weight matrices initialized as in \cite{hoedt_principled_2023}, and guaranteed to be positive by a ReLU applied to the weights.
+For non-linearities, we use a leaky version of a softplus, given by $sp_{\textrm{leaky}}(x) = \alpha x + (1 - \alpha) sp(x) + c_0$ where $sp(x)$ is a softplus function, $\alpha$ sets the leak slope for negative values, and $c_0$ sets the intercept. 
+These values are set by hyper-parameter sweep (???). 
+The leaky softplus non-linearity has appealing properties:
+It is continuously differentiable to at least second order, giving smooth Jacobians and Hessians.
+It retains benefits of leaky ReLUs in preventing dead units.
+Finally, it allows negative values to pass through the network, which is particularly important in the ICNN case, where the network weights are all positive.
+
+
+
+
+\subsection{Duality Computations}
+Given a neural network representation of the cumulant generating function $A(\theta)$, we want to be able to transform between parameter and moment representations $\theta \leftrightarrow \mu$, and to evaluate both CGF and rate function values, $A(\theta)$ and $I(\mu)$.
+Using the trained network, $A(\theta)$ is directly computed by evaluation, while the parameter to moment mapping $\mu(\theta)$ is given by its Jacobian (eq.~\ref{eq:duality_relations}).
+Evaluation of $I(\mu)$ and $\mu(\theta)$ both come down to evaluating the Legendre transform (eq.~\ref{eq:legendre_transform}). 
+We directly solve the optimization problem by gradient descent in $\theta$, with the resulting optimal input giving $\theta(\mu)$, while the optimal value is $I(\mu)$.
+This works well enough for our purposes, but more sophisticated optimization and differential equations based approaches are available as well [REF???].
+
 
 
 \bibliography{main.bib}
