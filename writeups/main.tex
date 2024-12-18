@@ -23,12 +23,14 @@
 \newcommand{\cov}{\mathrm{cov}}
 
 \usepackage{setspace}
-\doublespacing
 
 \begin{document}
 \title{Learned Cumulant Generating Functions Allow Adaptation of Neural Network Statistics}
 \author{Luke Rast}
 \maketitle
+
+% manuscript formatting
+\doublespacing
 \linenumbers
 
 
@@ -42,10 +44,6 @@
 \section{Introduction and Background}
 
 
-The cumulant generating function has properties that place it at the heart of change detection and adaptation.
-
-
-
 
 In order to make this paper tight, we must show that the learned CGF solves multiple issues related to adaptation / distribution change.
 We already have
@@ -55,103 +53,121 @@ We already have
 \end{enumerate}
 
 
-
-While the term `rate function' can have a variety of meanings, through-out this paper, it will always refer to the large-deviations rate function, which we define in detail below.
-
+\subsection{Intro the change detection problem}
 
 
 
 
-\subsection{Substance Intro}
+
+
+\subsection{CGF}
+
+The \textit{cumulant generating function} (CGF) of a random variable, $x$, is given by
+\begin{equation}
+  A(\theta) = \log \mathbb{E}_x[\exp(\theta^T x)]. \label{def:cgf}
+\end{equation}
+The CGF is the logarithm of the moment generating function.
+When it exists, it provides a unique representation of a probability distribution.
+Importantly, the cumulant generating function is guaranteed to be \textit{convex} [REF basic probability].
+
+
+One application of the CGF is constructing families of \textit{exponentially tilted} probability distributions \cite{morris_natural_1982,morris_unifying_2009}.
+Starting from a baseline distribution $h_0(x)$, with cumulant generating function $A_0(\theta)$, exponential tilting produces the family
+\begin{equation}
+  p_0(x | \theta) = h_0(x) e^{\theta^T x - A_0(\theta)}. \label{def:exponential_tilt}
+\end{equation}
+This is a natural exponential family of distributions, each of which modifies the base measure $h_0$ by concentrating the probability density along different directions to different extents.
+The CGF also produces cumulant generating functions for the whole family: ${K_0(t | \theta) = A_0(\theta + t) - A_0(\theta)}$.
+Thus the mean of any distribution in the family is given by the Jacobian of the CGF,
+\begin{equation}
+  \mu = \nabla_\theta A(\theta) \label{eq:cgf_jacobian}
+\end{equation}
+while the Hessian gives the covariance matrix, and so forth [REF basic probability].
+
+
+Another application of the CGF concerns the theory of large deviations \cite{dembo2009large,touchette_basic_2012}, which describes the rate at which rare events become more and more unlikely as we collect more samples. 
+For a series of probability measures, $p_n$, large deviations theory gives a \textit{rate function}, $I(x)$ that, loosely speaking, satisfies
+\begin{equation}
+  p_n(x \in \Gamma) \sim \exp \left( - n \min_{x \in \Gamma} I(x) \right) \quad \textrm{as} \quad n \to \infty \label{def:large_deviations}
+\end{equation}
+for any measurable set $\Gamma$.
+That is, the probability of outcomes in the set $\Gamma$ shrinks exponentially with $n$ at a rate that is dominated by the smallest value of $I(x)$ on the set $\Gamma$ (see \cite{dembo2009large} for more precise expressions).
+In particular, if we consider the distribution of the average $\mu_n = \frac{1}{n} \sum_{i=1}^n X_i$ of $n$ i.i.d. data points in $\mathbb{R}^d$, Cramer's theorem \cite{dembo2009large}, gives the corresponding rate function
+\begin{equation}
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
+\end{equation}
+The rate function is the Legendre transform of the cumulant generating function.
+This rate function also gives rise to an asymptotically tight (as $n \to \infty$) probability density over means \cite{iltis_sharp_1995,chaganty_multidimensional_1986}
+\begin{equation}
+  p(\mu; n) \approx \frac{n}{2\pi}^{\frac{d}{2}} |V|^{-1/2} \exp(-n I(\mu)). \label{def:mean_density}
+\end{equation}
+Where $n$ is the number of samples, $d$ is the dimensionality of the data, and $V = {\bm H}[A](\theta(\mu))$ is covariance matrix given by the Hessian of the CGF.
+
+
+To summarize these previous results, we have two related functions, $A(\theta) \leftrightarrow I(\mu)$, the cumulant generating function and rate function, 
+related through Legendre duality.
+Their arguments provide two related parameterizations $\theta \leftrightarrow \mu$ of the exponentially tilted family, corresponding to the natural parameter $\theta$ and the mean parameter, $\mu$.
+Due to the duality, these are related by 
+\begin{eqnarray}
+  \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu). \label{eq:duality_relations}
+\end{eqnarray}
+We apply these dual functions to the twin problems of change detection and adaptation.
+On one side of this duality, the rate function $I(\mu)$, gives the probability density over the mean of many samples.
+We will use this density to detect changes in the statistics of the world, based on unlikely mean values.
+On the other side of the duality, the CGF provides the basis for a family of modified versions of environmental statistics.
+We will use this family to adapt to changes in the statistics of the world. 
+
+
+
+
+
+
+\subsubsection{Summary}
+
+
+
+What's more, because the CGF $A(\theta)$ is convex, the Legendre transform relationship will be a duality, and therefore we have the relationships:
+
+The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
+Thus, $I(\mu)$ is a function of observation \textit{averages}.
+
+
+
+
+
 
 
 In this work, we use learned moment generating functions to track neural network statistics 
 
 
-The \textit{moment generating function} (MGF) is given by
-\begin{equation}
-  M(\theta) = \mathbb{E}_x(e^{\theta x}), \label{def:MGF}
-\end{equation}
-the Laplace transform of the probability density function.
-When this function exists, it gives an alternative represention of a probability distribution that is used frequently in probability and statistics [Ref-general MGF].
-One important application of the MGF is for constructing families of \textit{exponentially tilted} probability distributions \cite{morris_natural_1982,morris_unifying_2009}.
-Starting from a baseline distribution $h_0(x)$, with moment generating function $M_0(\theta)$, exponential tilting produces the family
-\begin{equation}
-  p_0(x | \theta) = e^{\theta^T x} \frac{h_0(x)}{M_0(\theta)}. \label{def:exponential_tilt}
-\end{equation}
-This is a natural exponential family of distributions, and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
+and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
 This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
-
-The logarithm of the MFG is called the \textit{cumulant generating function} (CGF):
-\begin{equation}
-  A(\theta) = \log \mathbb{E}_x[\exp(\theta x)]. \label{def:cgf}
-\end{equation}
-This function, if it exists, is guaranteed to be \textit{convex}.
-Paralleling other applications of the Laplace transform [REF-physics uses] the CGF maintains many of the relationships that the MGF has to other quantities, through its Legendre transform [Ref - Legendre]:
-\begin{equation}
-  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
-\end{equation}
-We will take advantage of some of these well-known relationships in this paper.
-
-First, the exponentially tilted distributions become reconizably exponential families
-\begin{equation}
-  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta) ),
-\end{equation}
-and the CGF extends to produce cumulant generating functions for the whole family: $K(t | \theta) = A(\theta + t) - A(\theta)$.
-What's more, because the CGF $A(\theta)$ is convex, the Legendre transform relationship will be a duality, and therefore we have the relationships:
-\begin{eqnarray}
-  \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu). \label{eq:duality_relations}
-\end{eqnarray}
-The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
-Thus, $I(\mu)$ is a function of observation \textit{averages}.
-
-This function appears in large deviations theory \cite{dembo2009large,touchette_basic_2012} as what is called the \textit{rate function} (or more accurately, it's negative).
-\begin{equation}
-  -I(\mu) = \lim_{N \to \infty} \frac{1}{N} \log \left( p \left(\frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \right)
-\end{equation}
-In other words, $I(\mu)$ gives the asymptotic \textit{decay rate}, as we increase the number of samples, of the probability that the empirical mean deviates from the true mean by at least $\mu$.
-\begin{equation}
-  p \left( \frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \approx \exp(-N I(\mu))
-\end{equation}
-This result is known as Cramer's theorem \cite{dembo2009large}.
-In this work, we use this as a means of detecting changes in environmental statistics. 
-
-
-\subsubsection{Large Deviations rewrite}
-% written after I studied the large deviations theory
-
-The theory of large deviations \cite{dembo2009large,touchette_basic_2012} describes the rate at which rare events become more and more unlikely as we collect more samples. 
-So, for a series of probability measures, $p_n$, large deviations theory gives a \textit{rate function}, $I(x)$ that, loosely speaking, satisfies
-\begin{equation}
-  p_n(x \in \Gamma) \sim \exp \left( - n \min_{x \in \Gamma} I(x) \right) \quad \textrm{as} \quad n \to \infty
-\end{equation}
-for any measurable set $\Gamma$.
-That is, the probability of outcomes in the set $\Gamma$ shrinks exponentially with $n$ at a rate that is dominated by the smallest value of $I(x)$ on the set $\Gamma$ (see \cite{dembo2009large} for more precise expressions).
-In particular, if we consider the average $\mu_n = \frac{1}{n} \sum_{i=1}^n X_i$ of $n$ i.i.d. data points $X_i$ in $\mathbb{R}^n$, the large deviations theory provides a refinement of the law of large numbers and the central limit theorem, through Cramer's theorem \cite{dembo2009large} (for $\mathbb{R}^n$), which states that the rate function is given by
-\begin{equation}
-  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
-\end{equation}
-That is, the rate function is the Legendre transform of the cumulant generating function.
-
-
-
-
 
 
 
 \subsection{Previous work}
 
-Previous works on 
+Previous works on adaptation more generally
 
-Previous works on exponential tilting
-- finance
-- ML
+Previous works on exponential tilting: finance, ML, adaptation 
+
 
 What is the connection to previous free energy based approaches?
 
 
 
 \section{Results}
+
+
+\subsection{Relationship to neural networks}
+
+In this work, we use the cumulant generating function for the statistics of internal layers of a neural network as a means to both detect and correct changes in these internal statistics.
+
+
+
+\subsection{PLACEHOLDER}
+
+
 
 Learn cumulant generating function (CGF)
 \begin{equation}
@@ -278,6 +294,52 @@ Using the trained network, $A(\theta)$ is directly computed by evaluation, while
 Evaluation of $I(\mu)$ and $\mu(\theta)$ both come down to evaluating the Legendre transform (eq.~\ref{eq:legendre_transform}). 
 We directly solve the optimization problem by gradient descent in $\theta$, with the resulting optimal input giving $\theta(\mu)$, while the optimal value is $I(\mu)$.
 This works well enough for our purposes, but more sophisticated optimization and differential equations based approaches are available as well [REF???].
+
+
+
+\section{OLD MATERIAL}
+
+
+The \textit{moment generating function} (MGF) is given by
+\begin{equation}
+  M(\theta) = \mathbb{E}_x(e^{\theta x}), \label{def:MGF}
+\end{equation}
+the Laplace transform of the probability density function.
+
+
+
+Paralleling other applications of the Laplace transform [REF-physics uses] the CGF maintains many of the relationships that the MGF has to other quantities, through its Legendre transform [Ref - Legendre]:
+\begin{equation}
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
+\end{equation}
+We will take advantage of some of these well-known relationships in this paper.
+
+First, the exponentially tilted distributions become reconizably exponential families
+\begin{equation}
+  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta) ),
+\end{equation}
+
+
+This function appears in large deviations theory \cite{dembo2009large,touchette_basic_2012} as what is called the \textit{rate function} (or more accurately, it's negative).
+\begin{equation}
+  -I(\mu) = \lim_{N \to \infty} \frac{1}{N} \log \left( p \left(\frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \right)
+\end{equation}
+In other words, $I(\mu)$ gives the asymptotic \textit{decay rate}, as we increase the number of samples, of the probability that the empirical mean deviates from the true mean by at least $\mu$.
+\begin{equation}
+  p \left( \frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \approx \exp(-N I(\mu))
+\end{equation}
+This result is known as Cramer's theorem \cite{dembo2009large}.
+In this work, we use this as a means of detecting changes in environmental statistics. 
+
+
+\subsubsection{Intro the CGF}
+
+The cumulant generating function (CGF) has properties that make it very well suited to both change detection and adaptation, as we will review here.
+On one hand, the cumulant generating function facilitates construction of 'tilted' distributions, a family of variants of a base probability density.
+On the other hand, the convex conjugate of the CGF allows for determination of the likelihood of extreme values of the averages of large samples....
+
+
+
 
 
 
