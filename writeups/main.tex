@@ -25,7 +25,7 @@
 \usepackage{setspace}
 
 \begin{document}
-\title{Learned Cumulant Generating Functions Allow Adaptation of Neural Network Statistics}
+\title{Learned Cumulant Generating Functions Allow Efficient Adaptation of Neural Network Statistics}
 \author{Luke Rast}
 \maketitle
 
@@ -36,7 +36,12 @@
 
 \section{Abstract}
 
+Reformulate
 
+
+
+
+Leveraging duality 
 
 
 
@@ -113,35 +118,17 @@ Due to the duality, these are related by
 \end{eqnarray}
 We apply these dual functions to the twin problems of change detection and adaptation.
 On one side of this duality, the rate function $I(\mu)$, gives the probability density over the mean of many samples.
-We will use this density to detect changes in the statistics of the world, based on unlikely mean values.
+We use this density to detect changes in the statistics of the world, based on unlikely mean values.
 On the other side of the duality, the CGF provides the basis for a family of modified versions of environmental statistics.
-We will use this family to adapt to changes in the statistics of the world. 
+We use this family to adapt to changes in the statistics of the world. 
+
+Here, we focus on change detection and adaptation in the context of neural networks. 
+We start with trained neural networks, and aim to track and respond to changes in the statistic of one of the hidden layers. 
+We do this by learning a second neural network, which is trained to reproduce the empirical cumulant generating function for the activity of this hidden layer.
+As an input convex neural network \cite{amos_input_2017} this representation of the CGF is guaranteed to be convex and is easily differentiable, giving access to both the CGF and the rate function.
+We take advantage of the rate function...
 
 
-
-
-
-
-\subsubsection{Summary}
-
-
-
-What's more, because the CGF $A(\theta)$ is convex, the Legendre transform relationship will be a duality, and therefore we have the relationships:
-
-The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
-Thus, $I(\mu)$ is a function of observation \textit{averages}.
-
-
-
-
-
-
-
-In this work, we use learned moment generating functions to track neural network statistics 
-
-
-and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
-This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
 
 
 
@@ -155,84 +142,100 @@ Previous works on exponential tilting: finance, ML, adaptation
 What is the connection to previous free energy based approaches?
 
 
+Averaging enough data points will allow us to determine whether the network activity follows the same statistics as the training data using either element-wise test on each dimension, as in \cite{rabanser_failing_2019} or a joint test on the all dimensions simultaneously.
+
+
+\subsubsection{Connection to VAEs}
+This is where the exponential family analogy belongs.
+
+
+Connection to VAEs \cite{kingma_auto-encoding_2013}: inner vs outer relaxation of inference.
+VAEs learn to perform approximate inference with specified noise and latent variable distributions, while the approach here performs exact inference using learned noise distributions and their conjugates. 
+
+
+
+
+Learning an exponential family by learning sufficient statistic $T(x)$ and the base measure $h(x)$, here we use the features learned by a pre-trained neural network as sufficient statistics, and capture their distribution with learned moment generating function $A(\theta)$.
+
+
+First, the exponentially tilted distributions become reconizably exponential families
+\begin{equation}
+  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta) ),
+\end{equation}
+
+
+
+The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
+Thus, $I(\mu)$ is a function of observation \textit{averages}.
+
+and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
+This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
+
+
+
+
 
 \section{Results}
 
 
-\subsection{Relationship to neural networks}
-
-In this work, we use the cumulant generating function for the statistics of internal layers of a neural network as a means to both detect and correct changes in these internal statistics.
-
-
-
-\subsection{PLACEHOLDER}
-
-
-
-Learn cumulant generating function (CGF)
+The empirical cumulant generating function uses the empirical mean to evaluate the expectation in the CGF
 \begin{equation}
-  A(\theta) = \log \mathbb{E}_x[\exp(\theta x)]
+  \hat A(\theta) = \log \sum_{x_i} \exp(\theta x).
 \end{equation}
-for the activity of neural on a network, as a means to capture the statistics of these layers.
-
-
-\subsection{Learned moment generating function}
-
-The cumulant generating function is constrained to be a convex function of its argument, $\theta$.
-We learn the cumulant generating function by training an input convex neural network (ICNN) \cite{amos_input_2017}, guaranteed to be convex, to reproduce the empirical cumulant generating function
-\begin{equation}
-  \hat A(\theta) = \log \sum_{x_i} \exp(\theta x),
-\end{equation}
-which is frequently used as a estimator for the CGF \cite{duffield_entropy_1995} [others]. 
-
+This expression has been used as a estimator for the CGF \cite{duffield_entropy_1995} [others ???]. 
+Given a trained neural neural network, we choose one hidden layer of the network to be our feature vector.
+We train an ICNN to capture the distribution of features on the training set by learning the empirical CGF for these features.
+That is to say, given input output pairs $\{ (\theta, \hat A(\theta) ) \}$, we train our input convex network to reproduce $\hat A(\theta)$.
+While we have a limited number of datapoints $x$ with which to evaluate the empirical CGF, we can create as many $\theta$ training points as required to learn the empirical CGF to desired precision.
 
 Question: how many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction by the neural network features.
 
+Other things to write about: features of the eCGF, limiting slopes; feature of the learned versions.
+
+
 
 \subsection{Change point detection}
-The cumulant generating function, $A(\theta)$ can be used to detect changes in the statistics of the network layers by taking advantage of tools from large deviations theory \cite{touchette_basic_2012} [others], which analyzes the decay behavior of the tails of distributions of sample averages.
-The connection is made through Cramer's theorem [ref], which states that the large deviations \textit{rate function}
-\begin{equation}
-  I(x) = \lim_{n \to \infty} \frac{1}{n} \log \left( p \left( \sum_{i=1}^n X_i \ge n x \right) \right)
-\end{equation}
-is the negative of the Legendre transform of the cumulant generating function
-\begin{equation}
-  -I(x) = \sup_{\theta}( \theta x - A(\theta) ).
-\end{equation}
-In other words, we can use the Legendre transform to approximate cumulative distribution function of averages
-\begin{equation}
-  p \left( \frac{1}{n} \sum_{i=1}^n X_i \ge x \right) \approx \exp(-n I(x))
-\end{equation}
-Averaging enough data points will allow us to determine whether the network activity follows the same statistics as the training data using either element-wise test on each dimension, as in \cite{rabanser_failing_2019} or a joint test on the all dimensions simultaneously.
+The learned CGF describes the feature statistics on the training set.
+We use the corresponding rate function to detect changes in these statistics that appear in the many sample feature averages. 
+
+
+Given the average value of our features on run-time data, we use the limiting probability density eq.~(\ref{def:mean_density}) to determine whether such an average represents a significant deviation from the training set.
+
+We can view this as a hypothesis test
+
+Find sets with a certain p-value, corresponding to the power? of our test
+
+Use level curves of the rate function as our family of sets
+
+Use importance sampling to avoid the curse of dimensionality to find probability of falling within a certain set.
+
+binary search to find the threashold that corresponds to our target p-value.
+
+
 
 
 Steps:
 \begin{enumerate}
-  \item Compute Legendre transforms
-  \item Empirical path-independence of Legendre transforms
-  \item Use for change-point detection
-  \item Compare sensitivity
+  \item Show sensitivity (and lack of sensitivity)
 \end{enumerate}
 
 
 
 \subsection{Exponential tilting}
-Given a learned cumulant generating function, $A(\theta)$ and an estimate of the density $h(T)$, we can use what is called `exponential tilting' \cite{morris_natural_1982,morris_unifying_2009} to construct a natural exponential family of distributions using this function as the base measure by:
-\begin{equation}
-  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta)).
-\end{equation}
-This gives us parameterized family of distributions with parameter $\theta$, and cumulant generating functions $C(t) = A(\theta +t) - A(\theta)$.
-The Fisher information matrix for this family is given by the Hessian of $A(\theta)$ 
-\begin{equation}
-  I(\theta) = \bm{H}_\theta A(\theta) 
-\end{equation}
+
+When a significant deviation from the training set is detected, we then wish to correct for this deviation in our model.
+
+We can accomplish these corrections by modelling the new feature distribution as an exponentially tilted (see eq.~(\ref{def:exponential_tilt})) 
+
+One way to do this is by fine-tuning the top half of the network on the training set with loss function weights, as given by [REF]
+
+
 
 Steps / questions:
 \begin{enumerate}
-  \item How does exponential tilting act on the distribution?
-  \item Does this capture the distribution given a particular value of the stimulus?
-  \item What about if we construct a circle through the activity space?
-  \item Use for Bayesian inference.
+  \item retraining
+  \item class conditional distribution
+  \item Use for Bayesian inference?
 \end{enumerate}
 
 
@@ -265,12 +268,12 @@ Establish the method for measuring the Fisher information of data. In particular
 
 \section{Discussion}
 
-Learning an exponential family by learning sufficient statistic $T(x)$ and the base measure $h(x)$, here we use the features learned by a pre-trained neural network as sufficient statistics, and capture their distribution with learned moment generating function $A(\theta)$.
-
 Future direction: learning $T(x)$ together with sufficient statistics.
 
-Connection to VAEs \cite{kingma_auto-encoding_2013}: inner vs outer relaxation of inference.
-VAEs learn to perform approximate inference with specified noise and latent variable distributions, while the approach here performs exact inference using learned noise distributions and their conjugates. 
+
+and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
+This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
+
 
 
 \section{Methods}
@@ -299,48 +302,10 @@ This works well enough for our purposes, but more sophisticated optimization and
 
 \section{OLD MATERIAL}
 
-
-The \textit{moment generating function} (MGF) is given by
+The Fisher information matrix for this family is given by the Hessian of $A(\theta)$ 
 \begin{equation}
-  M(\theta) = \mathbb{E}_x(e^{\theta x}), \label{def:MGF}
+  I(\theta) = \bm{H}_\theta A(\theta) 
 \end{equation}
-the Laplace transform of the probability density function.
-
-
-
-Paralleling other applications of the Laplace transform [REF-physics uses] the CGF maintains many of the relationships that the MGF has to other quantities, through its Legendre transform [Ref - Legendre]:
-\begin{equation}
-  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
-\end{equation}
-We will take advantage of some of these well-known relationships in this paper.
-
-First, the exponentially tilted distributions become reconizably exponential families
-\begin{equation}
-  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta) ),
-\end{equation}
-
-
-This function appears in large deviations theory \cite{dembo2009large,touchette_basic_2012} as what is called the \textit{rate function} (or more accurately, it's negative).
-\begin{equation}
-  -I(\mu) = \lim_{N \to \infty} \frac{1}{N} \log \left( p \left(\frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \right)
-\end{equation}
-In other words, $I(\mu)$ gives the asymptotic \textit{decay rate}, as we increase the number of samples, of the probability that the empirical mean deviates from the true mean by at least $\mu$.
-\begin{equation}
-  p \left( \frac{1}{N} \sum_{i=1}^N X_i \ge \mu \right) \approx \exp(-N I(\mu))
-\end{equation}
-This result is known as Cramer's theorem \cite{dembo2009large}.
-In this work, we use this as a means of detecting changes in environmental statistics. 
-
-
-\subsubsection{Intro the CGF}
-
-The cumulant generating function (CGF) has properties that make it very well suited to both change detection and adaptation, as we will review here.
-On one hand, the cumulant generating function facilitates construction of 'tilted' distributions, a family of variants of a base probability density.
-On the other hand, the convex conjugate of the CGF allows for determination of the likelihood of extreme values of the averages of large samples....
-
-
-
-
 
 
 \bibliography{main.bib}

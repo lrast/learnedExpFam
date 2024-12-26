@@ -1,0 +1,140 @@
+# minimum viable product
+
+import torch
+import warnings
+
+import numpy as np
+
+from scipy.stats import multivariate_normal
+
+
+class MeanChange(object):
+    """ Detects changes in the mean by determining whether the it differs
+        significantly from model values
+
+        Uses level curves of the rate function deliminate significance regions
+    """
+    def __init__(self, model, n_samples, pvalue):
+        super(MeanChange, self).__init__()
+        self.model = model
+        self.n_samples = n_samples
+
+        self.set_threashold(pvalue)
+
+    def limiting_density(self, mus):
+        """ Model based asymptotic pdf of the mean """
+        d = mus.shape[1]
+
+        thetas, Is = self.model.dual_opt(mus)
+        dets = torch.det(self.model.hess(thetas))
+        
+        log_density = (d/2) * np.log(self.n_samples / (2 * torch.pi)) \
+            - 0.5*torch.log(dets) - self.n_samples*Is
+
+        return torch.exp(log_density).detach()
+
+    def set_threashold(self, p_value):
+        """ Find the threashold value for the rate function that gives the 
+        desired p-value.
+        """
+        n_samples = self.n_samples
+
+        def within_rate_contour(xs, value):
+            """ are the point inside the rate function contour? """
+            I_vals = self.model.dual_function(xs)
+
+            return (I_vals < value).double()
+
+        # importance sampling distribution
+        mean = self.model.jac(torch.zeros(1, 2))[0].detach()
+        cov = self.model.hess(torch.zeros(1, 2))[0].detach()
+        sample_dist = multivariate_normal(mean=mean, cov=(1./n_samples)*cov)
+
+        def empirical_p(threashold):
+            func = lambda x: within_rate_contour(x, threashold)
+            return importance_sample(func, self.limiting_density, sample_dist).item()
+
+        self.threashold = binary_search_threashold(empirical_p, p_value)
+
+    def is_different(self, data):
+        """ Determine whether this data represents a significant deviation """
+        if data.shape[0] != self.n_samples:
+            raise Exception("Incorrect number of samples")
+
+        mean = data.mean(0)
+        rate_value = self.model.dual_function(mean[None, :])
+
+        return rate_value > self.threashold
+
+
+# Utilities
+#
+#
+
+def importance_sample(func, target_pdf, sample_dist, N=10000,
+                      weight_norm=True, resample=False):
+    """
+        Fully feaured importance sampling, for p-threashold evaluation
+    """
+    sample_pdf = sample_dist.pdf
+    sample_rvs = sample_dist.rvs
+
+    samples = torch.as_tensor(sample_rvs(N), dtype=torch.float)
+
+    importance_weights = target_pdf(samples) / torch.as_tensor(sample_pdf(samples))
+    w_total = importance_weights.sum()
+
+    if w_total / N < 0.1:
+        warnings.warn(f"Low effective sample number {w_total / N}")
+
+    if weight_norm or resample:
+        importance_weights = importance_weights / w_total
+    else:
+        importance_weights = importance_weights / N
+
+    if resample:
+        inds = np.random.choice(np.arange(0, N), size=N, p=importance_weights)
+
+        samples = samples[inds]
+        fvals = func(samples)
+        importance_weights = np.ones(N) / N
+
+    fvals = func(samples)
+
+    return (fvals * importance_weights).sum()
+
+
+def binary_search_threashold(empirical_p, pval, guess=1, delta=0.01,  Nmax=1000):
+    """ Binary search for threashold of interest.
+
+        Currently doesn't take into account noise in the data,
+        which might lead to incorrect updates
+    """
+    mag_bounds = [-float('inf'), float('inf')]
+    p_bounds = [-float('inf'), float('inf')]
+
+    threashold = guess
+    
+    for i in range(Nmax):
+        frac = empirical_p(threashold)
+        if frac > pval and frac < p_bounds[1]:
+            mag_bounds[1] = threashold
+            p_bounds[1] = frac
+            
+        elif frac < pval and frac > p_bounds[0]:
+            mag_bounds[0] = threashold
+            p_bounds[0] = frac
+
+        # termination criterion
+        if p_bounds[1] - p_bounds[0] < delta:
+            return 0.5*(mag_bounds[0] + mag_bounds[1])
+
+        # next step:
+        if mag_bounds[0] == -float('inf'):
+            threashold = threashold / 2
+        elif mag_bounds[1] == float('inf'):
+            threashold = 2 * threashold
+        else:
+            threashold = 0.5*(mag_bounds[0] + mag_bounds[1])
+
+    raise Exception("Convergence failure")
