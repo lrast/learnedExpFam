@@ -16,6 +16,7 @@
 \usepackage{bm}
 \usepackage{multicol}
 \usepackage[switch]{lineno}
+\usepackage{hyperref}
 
 \usepackage{tikz}
 \usetikzlibrary{fit,positioning}
@@ -25,7 +26,7 @@
 \usepackage{setspace}
 
 \begin{document}
-\title{Learned Cumulant Generating Functions Allow Efficient Adaptation of Neural Network Statistics}
+\title{Learned Cumulant Generating Functions for Efficient Adaptation of Neural Network Statistics}
 \author{Luke Rast}
 \maketitle
 
@@ -38,59 +39,65 @@
 
 Reformulate
 
-
-
-
 Leveraging duality 
 
+Leveraging learned CGF
+
+\begin{itemize}
+  \item Learned CGF fits distributional families and it fits them well.
+  \item Learned CGF facilitates change point detection via: multiple test possibilities
+  \item Learned CGF facilitates adaptation via: multiple adaptation possibilities
+\end{itemize}
 
 
 
-\section{Introduction and Background}
-
-
+\section{Overview}
 
 In order to make this paper tight, we must show that the learned CGF solves multiple issues related to adaptation / distribution change.
 We already have
 \begin{enumerate}
   \item Change point detection via rate function
-  \item adaptation through training on tilted distribution
+  \item Adaptation through training on tilted distribution
+  \item Class conditional CDF
 \end{enumerate}
 
 
-\subsection{Intro the change detection problem}
+\section{Introduction and Background}
 
 
+TO DO: Brief paragraphs on change detection and adaptation: Intro the change detection and adaptation problems.
+Must dovetail into the need for a representation of the probability distribution.
 
 
-
-
-\subsection{CGF}
+Fitting the distribution of a random variable based on samples is often accomplished by learning a representation, either parametric or non-parametric, of the probability density function.
+Here, we instead fit probability distributions by learning a representation of the cumulant generating function.
+We demonstrate that such representations are well suited to change detection and adaptation problems for neural networks.
 
 The \textit{cumulant generating function} (CGF) of a random variable, $x$, is given by
 \begin{equation}
   A(\theta) = \log \mathbb{E}_x[\exp(\theta^T x)]. \label{def:cgf}
 \end{equation}
-The CGF is the logarithm of the moment generating function.
-When it exists, it provides a unique representation of a probability distribution.
-Importantly, the cumulant generating function is guaranteed to be \textit{convex} [REF basic probability].
+It is the logarithm of the moment generating function, and, when it exists, provides a unique representation of the distribution of $x$.
+Importantly, the cumulant generating function is also guaranteed to be \textit{convex} \cite{barndorff2014information}.
 
 
 One application of the CGF is constructing families of \textit{exponentially tilted} probability distributions \cite{morris_natural_1982,morris_unifying_2009}.
-Starting from a baseline distribution $h_0(x)$, with cumulant generating function $A_0(\theta)$, exponential tilting produces the family
+Starting from a baseline distribution $h(x)$, with cumulant generating function $A(\theta)$, exponential tilting produces the family
 \begin{equation}
-  p_0(x | \theta) = h_0(x) e^{\theta^T x - A_0(\theta)}. \label{def:exponential_tilt}
+  p(x | \theta) = h(x) e^{\theta^T x - A(\theta)}. \label{def:exponential_tilt}
 \end{equation}
 This is a natural exponential family of distributions, each of which modifies the base measure $h_0$ by concentrating the probability density along different directions to different extents.
-The CGF also produces cumulant generating functions for the whole family: ${K_0(t | \theta) = A_0(\theta + t) - A_0(\theta)}$.
-Thus the mean of any distribution in the family is given by the Jacobian of the CGF,
+The CGF also produces cumulant functions for the whole family: ${K_0(t | \theta) = A_0(\theta + t) - A_0(\theta)}$.
+Thus, the mean of any distribution in the family is given by the Jacobian of the CGF,
 \begin{equation}
   \mu = \nabla_\theta A(\theta) \label{eq:cgf_jacobian}
 \end{equation}
-while the Hessian gives the covariance matrix, and so forth [REF basic probability].
+while the Hessian gives the covariance matrix, and so forth \cite{barndorff2014information}.
+We will use tilted distributions to adapt neural network activity.
 
 
-Another application of the CGF concerns the theory of large deviations \cite{dembo2009large,touchette_basic_2012}, which describes the rate at which rare events become more and more unlikely as we collect more samples. 
+!!! Rewrite this paragraph. Instead of introducing through large deviations theory, use the saddle-point approximation, which becomes tight in the large deviations limit.
+Another application of the CGF concerns the theory of large deviations \cite{dembo2009large}, which describes the rate at which rare events become more and more unlikely as we collect more samples. 
 For a series of probability measures, $p_n$, large deviations theory gives a \textit{rate function}, $I(x)$ that, loosely speaking, satisfies
 \begin{equation}
   p_n(x \in \Gamma) \sim \exp \left( - n \min_{x \in \Gamma} I(x) \right) \quad \textrm{as} \quad n \to \infty \label{def:large_deviations}
@@ -120,10 +127,10 @@ We apply these dual functions to the twin problems of change detection and adapt
 On one side of this duality, the rate function $I(\mu)$, gives the probability density over the mean of many samples.
 We use this density to detect changes in the statistics of the world, based on unlikely mean values.
 On the other side of the duality, the CGF provides the basis for a family of modified versions of environmental statistics.
-We use this family to adapt to changes in the statistics of the world. 
+We use this family to adapt to changes in the statistics of the world.
+We capture both functions using a learned representation of the CGF together with the duality relations.
 
-Here, we focus on change detection and adaptation in the context of neural networks. 
-We start with trained neural networks, and aim to track and respond to changes in the statistic of one of the hidden layers. 
+In order to focus in on change detection and adaptation in the context of neural networks, we start with trained neural networks, and aim to track and respond to changes in the statistics of one of the hidden layers. 
 We do this by learning a second neural network, which is trained to reproduce the empirical cumulant generating function for the activity of this hidden layer.
 As an input convex neural network \cite{amos_input_2017} this representation of the CGF is guaranteed to be convex and is easily differentiable, giving access to both the CGF and the rate function.
 We take advantage of the rate function...
@@ -146,30 +153,15 @@ Averaging enough data points will allow us to determine whether the network acti
 
 
 \subsubsection{Connection to VAEs}
-This is where the exponential family analogy belongs.
 
+Our approach is related to variational autoencoders (VAEs) \cite{kingma_auto-encoding_2013}, which learn to perform approximate inference under specified noise and latent variable distributions. 
+Our model instead performs exact inference with a learned noise distribution and its conjugate, at the cost of decreased flexibility in possible conditional distributions.
+Concretely, we use learned neural network features $T(x)$ as sufficient statistics and learn the cumulant generating function $A(\theta)$ that captures the base measure on these features.
+This specifies an exponential family, the set of exponentially tilted distributions, whose parameters determined through exact inference.
+Thus, while VAEs correspond to an \textit{outer approximation} using approximate inference, our approach gives an \textit{inner approximation} of inference by using family of distributions for whom inference is always exact.
+This process can produce any exponential family.
+In this work, we learn the sufficient statistics and cumulant generating function in turn, but extension to learning these simultaneously is an important future direction.
 
-Connection to VAEs \cite{kingma_auto-encoding_2013}: inner vs outer relaxation of inference.
-VAEs learn to perform approximate inference with specified noise and latent variable distributions, while the approach here performs exact inference using learned noise distributions and their conjugates. 
-
-
-
-
-Learning an exponential family by learning sufficient statistic $T(x)$ and the base measure $h(x)$, here we use the features learned by a pre-trained neural network as sufficient statistics, and capture their distribution with learned moment generating function $A(\theta)$.
-
-
-First, the exponentially tilted distributions become reconizably exponential families
-\begin{equation}
-  p(T | \theta) = h(T) \exp( \theta^T T - A(\theta) ),
-\end{equation}
-
-
-
-The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
-Thus, $I(\mu)$ is a function of observation \textit{averages}.
-
-and the same process can be extended to produce any exponential family, by combining a set of statistics of the data, $T(x)$, and a base distribution of these statistics.
-This is the path that we pursue in this paper: we will learn exponential families by learning both $T(x)$ and $M(\theta)$ and use these learned families to perform inference.
 
 
 
@@ -177,15 +169,23 @@ This is the path that we pursue in this paper: we will learn exponential familie
 
 \section{Results}
 
+In this work, we use a learned cumulant generating function to track the internal statistics of a neural network, and to compare the internal statistics in novel environments.
+Given a trained neural neural network, we choose one hidden layer of the network to be our feature vector, and train our CGF network to capture the statistics of the activity of this layer. 
 
-The empirical cumulant generating function uses the empirical mean to evaluate the expectation in the CGF
+
+
+
+\newpage
+\subsection{Learned cumulant generating function}
+\subsection{Vanilla CGF}
+We learn a neural network representation of the cumulant generating function by training an input convex neural network \cite{amos_input_2017,hoedt_principled_2023} to reproduce the values of the empirical cumulant generating function
 \begin{equation}
-  \hat A(\theta) = \log \sum_{x_i} \exp(\theta x).
+  \hat A(\theta) = \log \left( \frac{1}{N}\sum_{x_i} \exp(\theta x) \right), \label{def:eCGF}
 \end{equation}
-This expression has been used as a estimator for the CGF \cite{duffield_entropy_1995} [others ???]. 
-Given a trained neural neural network, we choose one hidden layer of the network to be our feature vector.
-We train an ICNN to capture the distribution of features on the training set by learning the empirical CGF for these features.
-That is to say, given input output pairs $\{ (\theta, \hat A(\theta) ) \}$, we train our input convex network to reproduce $\hat A(\theta)$.
+which uses the empirical mean to evaluate the expectation in the CGF. 
+This expression has previously been used as a estimator for the CGF \cite{duffield_entropy_1995} [others ???]. 
+We train the ICNN by evaluating the expression (\ref{def:eCGF}) across a variety of $\theta$ input values that we randomly sample, and training the network to replicate the value of $\hat A(\theta)$.
+
 While we have a limited number of datapoints $x$ with which to evaluate the empirical CGF, we can create as many $\theta$ training points as required to learn the empirical CGF to desired precision.
 
 Question: how many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction by the neural network features.
@@ -193,39 +193,48 @@ Question: how many training samples do I need as a function of dimensionality to
 Other things to write about: features of the eCGF, limiting slopes; feature of the learned versions.
 
 
+\subsection{Class conditional parameterization}
 
+
+
+
+
+\newpage
 \subsection{Change point detection}
-The learned CGF describes the feature statistics on the training set.
-We use the corresponding rate function to detect changes in these statistics that appear in the many sample feature averages. 
+Given a learned CGF, which captures the statistics of the data that it was trained on, our first application is to detect whether newly observed data follows the same statistics.
+The CGF plugs easily into several methods for change detection.
+
+\noindent \textbf{Score test:} \cite{cox1979theoretical} 
+Given the family of exponentially tilted distributions (\ref{def:exponential_tilt}), we test whether observed data is consistent with $\theta = 0$, which corresponds to the base distribution that $A(\theta)$ was trained on.
+We test this in the large data limit, by testing whether the data average is consistent with a multivariate normal distribution with mean $\frac{\partial}{\partial \theta_i} A(\theta)$ and covariance $\frac{1}{n}\frac{\partial^2}{\partial \theta_i \partial \theta_j} A(\theta)$, using a Chi-square distribution.
+
+\noindent \textbf{Rate function test:} Refining the idea of the score test, we can instead use the asymptotic mean probability density (\ref{def:mean_density}), which (as a large deviations principle) is more accurate at moderate sample sizes than the normal assumption.
+We use level curves of the rate function to delineate a significance region, by finding a radius $r_\alpha$ such that $p(I(\mu) \le r_\alpha) = 1 - \alpha$.
+Noting that $I(\mu)$ is increasing, we can use $I(\mu) \le r_\alpha$ to test whether observations are consistent with the density (\ref{def:mean_density}) with significance level $\alpha$.
+We use importance sampling (with a mean and covariance matched multivariate normal proposal distribution) together with binary search to determine the value of $r_\alpha$ given a rate function from the learned CGF.
 
 
-Given the average value of our features on run-time data, we use the limiting probability density eq.~(\ref{def:mean_density}) to determine whether such an average represents a significant deviation from the training set.
-
-We can view this as a hypothesis test
-
-Find sets with a certain p-value, corresponding to the power? of our test
-
-Use level curves of the rate function as our family of sets
-
-Use importance sampling to avoid the curse of dimensionality to find probability of falling within a certain set.
-
-binary search to find the threashold that corresponds to our target p-value.
-
-
-
-
-Steps:
-\begin{enumerate}
-  \item Show sensitivity (and lack of sensitivity)
-\end{enumerate}
+\noindent \textbf{Multivariate KS test:}
 
 
 
-\subsection{Exponential tilting}
 
-When a significant deviation from the training set is detected, we then wish to correct for this deviation in our model.
 
-We can accomplish these corrections by modelling the new feature distribution as an exponentially tilted (see eq.~(\ref{def:exponential_tilt})) 
+
+
+
+\newpage
+\subsection{Adaptation through exponential tilting}
+Once we detect a significant change in the internal statistic of our neural network, we then want to correct our model to account for that change.
+We model the new distribution of features as an exponential tilt of the original (\ref{def:exponential_tilt}), with parameters determined from observed averages of the features by the mapping (\ref{eq:duality_relations}) from mean parameters to natural parameters.
+We can then use this distribution to correct for changes in input statistics in several different ways.
+
+\noindent \textbf{Fine-tuning:} Given the exponentially tilted distribution of hidden layer activity, we follow the approach of \cite{maity_understanding_2023}, using the updated distribution to construct importance weights that we use for fine-tuning with the original training data.
+We freeze the weights of the network below our hidden layer of interest, and fine-tune the top half of the network 
+
+
+
+
 
 One way to do this is by fine-tuning the top half of the network on the training set with loss function weights, as given by [REF]
 
@@ -240,6 +249,29 @@ Steps / questions:
 
 
 
+
+
+
+
+
+
+\newpage
+\subsection{Application 1: neural network fine-tuning}
+
+We first apply the learned CGF to fine-tune trained neural networks in novel environments.
+Given a trained neural neural network, we choose one hidden layer of the network to be our feature vector, and train our CGF network to capture the statistics of the activity of this layer.
+Given such a CGF, we
+
+
+
+
+
+
+
+
+
+
+\newpage
 \subsection{Adaptation Through Fine tuning}
 
 
@@ -284,9 +316,9 @@ We use a multi-layer perceptron with no skip connections, but with positive weig
 For non-linearities, we use a leaky version of a softplus, given by $sp_{\textrm{leaky}}(x) = \alpha x + (1 - \alpha) sp(x) + c_0$ where $sp(x)$ is a softplus function, $\alpha$ sets the leak slope for negative values, and $c_0$ sets the intercept. 
 These values are set by hyper-parameter sweep (???). 
 The leaky softplus non-linearity has appealing properties:
-It is continuously differentiable to at least second order, giving smooth Jacobians and Hessians.
+It is convex and continuously differentiable to at least second order, giving smooth Jacobians and Hessians.
 It retains benefits of leaky ReLUs in preventing dead units.
-Finally, it allows negative values to pass through the network, which is particularly important in the ICNN case, where the network weights are all positive.
+Finally, it allows negative values to pass through the network, which is particularly important in the ICNN case, where the network weights are constrained to be positive.
 
 
 
@@ -296,7 +328,10 @@ Given a neural network representation of the cumulant generating function $A(\th
 Using the trained network, $A(\theta)$ is directly computed by evaluation, while the parameter to moment mapping $\mu(\theta)$ is given by its Jacobian (eq.~\ref{eq:duality_relations}).
 Evaluation of $I(\mu)$ and $\mu(\theta)$ both come down to evaluating the Legendre transform (eq.~\ref{eq:legendre_transform}). 
 We directly solve the optimization problem by gradient descent in $\theta$, with the resulting optimal input giving $\theta(\mu)$, while the optimal value is $I(\mu)$.
-This works well enough for our purposes, but more sophisticated optimization and differential equations based approaches are available as well [REF???].
+This works well enough for our purposes, but more sophisticated optimization and differential equations based approaches can also be applied.
+
+
+\subsection{Change detection}
 
 
 
@@ -306,6 +341,9 @@ The Fisher information matrix for this family is given by the Hessian of $A(\the
 \begin{equation}
   I(\theta) = \bm{H}_\theta A(\theta) 
 \end{equation}
+
+The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
+Thus, $I(\mu)$ is a function of observation \textit{averages}.
 
 
 \bibliography{main.bib}

@@ -6,17 +6,44 @@ import warnings
 import numpy as np
 
 from scipy.stats import multivariate_normal
+from scipy.stats import chi2
 
 
-class MeanChange(object):
+class ScoreTest(object):
+    """ Detect changes using the CGF alone via the score function test
+    """
+    def __init__(self, cgf_model, n_samples, pvalue):
+        super(ScoreTest, self).__init__()
+        self.cgf_model = cgf_model
+        self.n_samples = n_samples
+        self.pvalue = pvalue
+
+    def is_different(self, data):
+        """ Determine whether this data represents a significant deviation
+            from the baseline theta = 0
+        """
+        n_samples, n_dims = data.shape
+
+        model_mean = self.cgf_model.jac(torch.zeros(1, 2))[0].detach()
+        model_cov = self.cgf_model.hess(torch.zeros(1, 2))[0].detach()
+
+        emp_mean = data.mean(0)
+
+        score = (1./n_samples) * (emp_mean - model_mean).T @ \
+            torch.linalg.inv(model_cov) @ (emp_mean - model_mean)
+
+        return chi2(n_dims).cdf(score) > self.pvalue
+
+
+class RateFunctionTest(object):
     """ Detects changes in the mean by determining whether the it differs
-        significantly from model values
+        significantly from cgf_model values
 
         Uses level curves of the rate function deliminate significance regions
     """
-    def __init__(self, model, n_samples, pvalue):
-        super(MeanChange, self).__init__()
-        self.model = model
+    def __init__(self, cgf_model, n_samples, pvalue):
+        super(RateFunctionTest, self).__init__()
+        self.cgf_model = cgf_model
         self.n_samples = n_samples
 
         self.set_threashold(pvalue)
@@ -25,8 +52,8 @@ class MeanChange(object):
         """ Model based asymptotic pdf of the mean """
         d = mus.shape[1]
 
-        thetas, Is = self.model.dual_opt(mus)
-        dets = torch.det(self.model.hess(thetas))
+        thetas, Is = self.cgf_model.dual_opt(mus)
+        dets = torch.det(self.cgf_model.hess(thetas))
         
         log_density = (d/2) * np.log(self.n_samples / (2 * torch.pi)) \
             - 0.5*torch.log(dets) - self.n_samples*Is
@@ -41,13 +68,13 @@ class MeanChange(object):
 
         def within_rate_contour(xs, value):
             """ are the point inside the rate function contour? """
-            I_vals = self.model.dual_function(xs)
+            I_vals = self.cgf_model.dual_function(xs)
 
             return (I_vals < value).double()
 
         # importance sampling distribution
-        mean = self.model.jac(torch.zeros(1, 2))[0].detach()
-        cov = self.model.hess(torch.zeros(1, 2))[0].detach()
+        mean = self.cgf_model.jac(torch.zeros(1, 2))[0].detach()
+        cov = self.cgf_model.hess(torch.zeros(1, 2))[0].detach()
         sample_dist = multivariate_normal(mean=mean, cov=(1./n_samples)*cov)
 
         def empirical_p(threashold):
@@ -62,7 +89,7 @@ class MeanChange(object):
             raise Exception("Incorrect number of samples")
 
         mean = data.mean(0)
-        rate_value = self.model.dual_function(mean[None, :])
+        rate_value = self.cgf_model.dual_function(mean[None, :])
 
         return rate_value > self.threashold
 

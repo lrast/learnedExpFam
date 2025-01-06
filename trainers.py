@@ -24,16 +24,19 @@ def train_model(model, directory, log_wandb=True, project='learnedExpFam',
                                            patience=trainer_params.pop('patience')
                                            )
 
-    checkpoint_callback_val = ModelCheckpoint(dirpath=directory,
-                                              filename='validation-{epoch}-{step}',
-                                              every_n_epochs=1, 
-                                              save_top_k=1,
-                                              monitor='Val Loss',
-                                              save_weights_only=True,
-                                              save_last=False
-                                              )
+    if directory is not None:
+        checkpoint_callback_val = ModelCheckpoint(dirpath=directory,
+                                                  filename='validation-{epoch}-{step}',
+                                                  every_n_epochs=1, 
+                                                  save_top_k=1,
+                                                  monitor='Val Loss',
+                                                  save_weights_only=True,
+                                                  save_last=False
+                                                  )
 
-    callbacks = [checkpoint_callback_val, earlystopping_callback]
+        callbacks = [checkpoint_callback_val, earlystopping_callback]
+    else:
+        callbacks = [earlystopping_callback]
 
     logger = True
     if log_wandb:
