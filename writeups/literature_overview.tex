@@ -1,0 +1,155 @@
+\documentclass{article}[10pt]      % use "amsart" instead of "article" for AMSLaTeX format
+\usepackage{geometry}                       % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                          % ... or a4paper or a5paper or ... 
+%\geometry{landscape}                       % Activate for rotated page geometry
+%\usepackage[parfill]{parskip}          % Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}               % Use pdf, png, jpg, or epsÂ§ with pdflatex; use eps in DVI mode
+                                % TeX will automatically convert eps --> pdf in pdflatex   
+\usepackage{caption}
+\usepackage{subcaption}
+\captionsetup{justification=raggedright,singlelinecheck=false}
+
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage{verbatim}
+\usepackage{bm}
+
+
+\usepackage{tikz}
+\usetikzlibrary{fit,positioning}
+
+\newcommand{\cov}{\mathrm{cov}}
+
+%\usepackage{minted}
+
+
+\begin{document}
+\title{Literature Survey}
+\author{Luke Rast}
+\maketitle
+
+
+This is where I put together a summary of the other literature related to this problem.
+There is a large amount of it to go through.
+Hopefully this will help with sorting through all of the things that have been done previously.
+
+
+\section{Individual Summaries}
+Summaries of individual works written as I read through them in detail
+
+
+
+
+
+
+
+\section{Questions / to dos}
+
+\begin{enumerate}
+  \item Look into importance-weighted ERM
+\end{enumerate}
+
+One critical thing that I need to demonstrate for this problem is the fidelity of the method for different tasks, and the behavior of the learned CGF under different conditions. 
+This is probably the most important issue. Even more so than than coming up with different / novel methods for adjusting the networks. That said, a Bayesian adjustment based on the distribution is still appealing.
+
+
+The core thing that I still haven't figured out is: What are my actual claims?
+
+
+
+\section{Distribution Shift}
+
+Given inputs $\bm{x}$ and outputs $y$, we can classify the different types of distribution shift that can occur.
+`Covariate shift' leaves the distribution $p(y|\bm{x})$ unchanged, while $p(x)$ changes: the feature distribution may change, but they way that features generate labels is unchanged
+`Label shift' leaves $p(\bm{x}|y)$ fixed while $p(y)$ changes: the prevalence of different labels may change, but the signatures of the labels are unchanged.
+Meanwhile, `concept drift' leaves the one (or both) of the marginal distributions unchanged, while the conditional distribution changes.
+
+
+
+\subsection{Detecting and Correcting for Label Shift with Black Box Predictors - 2018 \cite{lipton_detecting_2018}}
+(This is a good baseline for label shift detection and adaptation methods. It is a simple method using empirical frequencies.)
+
+Black box shift estimation: Focuses on the case of \textit{label shift} detection and adaptation.
+
+\noindent \textbf{Detection:} First, use a method of moments involving empirical label frequencies and confusion matrices to estimate the observed label distribution.
+Next, detect label shifts by finding changes in the distribution of predictions (via KS test).
+
+\noindent \textbf{Correction:} Weighted empirical risk minimization with importance weights determined from the detection approach.
+In other words, the loss function is weighted by the relative prevalence of a given label.
+
+\noindent \textbf{Relationship to mine:}
+This is one-dimensional, other work (On the Decreasing Power of Kernel and Distance based Nonparametric Hypothesis Tests in High Dimensions) points to an issue with high dimensional representaions, ours is a medium dimensional representation.
+This work uses a method of moments approximation for the distribution of classifier outputs, while we use the internal statistic of neural network activity.
+This is a simple starting point for explaination, and also a work that we are fairly directly expanding upon.
+
+
+\subsection{A Unified View of Label Shift Estimation - 2020 \cite{garg_unified_2020}}
+Again focuses on label shift, building on the previous work, among others. Again focuses on importance weight estimation.
+Contrasts confusion matrix approaches with label shifts fit by fitting minimum KL estimates, assuming that the estimator produces \textit{calibrated} predictions of output values.
+Importantly, this work generalizes the formalism to include feature vectors that are (random) functions of inputs.
+It focuses on predictor outputs, but the approach should apply to our learned features as well.
+It also shows us what we need in our probability estimators: calibration.
+
+
+\subsection{Understanding new tasks through the lens of training data via exponential tilting - 2023 \cite{maity_understanding_2023}}
+Uses exponential tilting to find importance weights for fine-tuning. Emphasizes that these importance weights are not limited to the label shift problem or the covariate shift problem. Both paramaeter and normalization values are fit by optimization of KL-divergence between the tilted marginal stimulus distribution and the test-time data.
+
+
+
+\subsection{Covariate Shift Adaptation by Importance Weighted Cross Validation - 2007 \cite{sugiyama_covariate_2007}}
+Early idea to use importance weights to correct: 1. loss function to get consistent estimators, 2. cross validation to get unbiased risk estimator.
+Simple estimates of density, .
+
+
+
+\section{Saddlepoint Approximation}
+
+
+
+
+
+
+\section{Misc}
+\subsection{Mini Summaries}
+\cite{hendrycks_baseline_2017}: Uses neural network classifier output values to find individual examples that are in / out of distribution.
+\cite{garg_leveraging_2022}: Similar idea for using black-box calssifier softmax outputs to predict accuracy, compares to netowrks calibrated on target data distributions. - good baselines for shift detection.
+
+
+\cite{namkoong_minimax_2024}: defines a notion of the `stability' of a model under distribution shifts:
+\begin{equation}
+  I_y(P) = \min_Q \{D_{kl}(Q | P) | \mathbb{E}_Q[R] \ge y  \}
+\end{equation}
+here $R \sim P$ is the loss distribution of a model, and $y$ is a threshold value of loss.
+So, the metric is to find the \textit{closest} distribution of outputs KL-wise that exceeds acceptable losses.
+The goal here is to predict which models will fail on novel datasets by examining their performance distributions....
+If $R$ is distributed according to $P$, then $I_y(P)$ is the large deviations rate function (as a function of $y$).
+
+\cite{guggilam_anomaly_2021}: Large deviations approach to anomaly detection. Uses some sort of projection approach to compute the rate function. Uses threshold applied to the rate function as an anomaly detection approach.
+
+\cite{rabanser_failing_2019}: tests of different methods for detecting shifts.
+
+
+
+\section{To look at}
+Previous works on exponential tilting
+- finance
+- ML
+
+
+\section{Adaptation}
+
+
+
+
+\section{Exponential tilting}
+
+
+
+
+
+
+\bibliography{literature_overview.bib}
+\bibliographystyle{ieeetr}
+
+\end{document}

@@ -11,7 +11,8 @@ def train_model(model, directory, log_wandb=True, project='learnedExpFam',
 
     trainer_params = {'max_epochs': 1000,
                       'patience': 100, 
-                      'gradient_clip_val': 0}
+                      'gradient_clip_val': 0,
+                      'resample_freq': None}
 
     model_defaults = dict(filter(
                             lambda i: (i[0] in trainer_params.keys()),
@@ -19,6 +20,11 @@ def train_model(model, directory, log_wandb=True, project='learnedExpFam',
                           ))
     trainer_params.update(model_defaults)
     trainer_params.update(trainer_kwargs)
+
+    resample_freq = trainer_params.pop('resample_freq')
+    if resample_freq:
+        trainer_params['reload_dataloaders_every_n_epochs'] = resample_freq
+
 
     earlystopping_callback = EarlyStopping(monitor='Val Loss', mode='min', 
                                            patience=trainer_params.pop('patience')

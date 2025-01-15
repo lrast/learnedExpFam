@@ -5,7 +5,7 @@ import warnings
 
 import numpy as np
 
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, norm
 from scipy.stats import chi2
 
 
@@ -45,12 +45,13 @@ class RateFunctionTest(object):
         super(RateFunctionTest, self).__init__()
         self.cgf_model = cgf_model
         self.n_samples = n_samples
+        self.n_dims = cgf_model.data.shape[1]
 
         self.set_threashold(pvalue)
 
     def limiting_density(self, mus):
         """ Model based asymptotic pdf of the mean """
-        d = mus.shape[1]
+        d = self.n_dims
 
         thetas, Is = self.cgf_model.dual_opt(mus)
         dets = torch.det(self.cgf_model.hess(thetas))
@@ -73,8 +74,8 @@ class RateFunctionTest(object):
             return (I_vals < value).double()
 
         # importance sampling distribution
-        mean = self.cgf_model.jac(torch.zeros(1, 2))[0].detach()
-        cov = self.cgf_model.hess(torch.zeros(1, 2))[0].detach()
+        mean = self.cgf_model.jac(torch.zeros(1, self.n_dims))[0].detach()
+        cov = self.cgf_model.hess(torch.zeros(1, self.n_dims))[0].detach()
         sample_dist = multivariate_normal(mean=mean, cov=(1./n_samples)*cov)
 
         def empirical_p(threashold):
@@ -107,6 +108,8 @@ def importance_sample(func, target_pdf, sample_dist, N=10000,
     sample_rvs = sample_dist.rvs
 
     samples = torch.as_tensor(sample_rvs(N), dtype=torch.float)
+    if len(samples.shape) == 1:
+        samples = samples[:, None]
 
     importance_weights = target_pdf(samples) / torch.as_tensor(sample_pdf(samples))
     w_total = importance_weights.sum()

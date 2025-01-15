@@ -21,25 +21,28 @@ class CGF_ICNN(pl.LightningModule):
         super(CGF_ICNN, self).__init__()
 
         self.data = data_to_model.clone().detach()
+        input_dim = data_to_model.shape[1]
 
         hyperparameterValues = {
             # seed
             'seed': torch.random.seed(),
             # architecture
-            'input_dim': 2,
+            'input_dim': input_dim,
             'negative_slope': 0.05,
             'offset': -0.6931,
+            'hidden_size': 200,
 
             # training
             'lr': 1E-3,
             'batchsize': 128,
             'patience': 100,
             'bias_noise': 0.5,
+            'max_epochs': 10000,
 
             # training data
-            'numsamples': 2000,
+            'numsamples': 20000,
             'variance': None,
-            'simple_target': False,
+            'resample_freq': None,
 
             # to implement
             'skipconnections': False,
@@ -57,13 +60,16 @@ class CGF_ICNN(pl.LightningModule):
             raise NotImplementedError('Dropout is not implemented')
 
         self.model = nn.Sequential(
-                nn.Linear(self.hparams.input_dim, 200),
+                nn.Linear(self.hparams.input_dim, self.hparams.hidden_size),
                 LeakySoftplus(self.hparams.negative_slope, self.hparams.offset),
-                ConvexLinear(200, 200, bias_noise=self.hparams.bias_noise),
+                ConvexLinear(self.hparams.hidden_size, self.hparams.hidden_size,
+                             bias_noise=self.hparams.bias_noise),
                 LeakySoftplus(self.hparams.negative_slope, self.hparams.offset),
-                ConvexLinear(200, 200, bias_noise=self.hparams.bias_noise),
+                ConvexLinear(self.hparams.hidden_size, self.hparams.hidden_size,
+                             bias_noise=self.hparams.bias_noise),
                 LeakySoftplus(self.hparams.negative_slope, self.hparams.offset),
-                ConvexLinear(200, 1, bias_noise=self.hparams.bias_noise)
+                ConvexLinear(self.hparams.hidden_size, 1,
+                             bias_noise=self.hparams.bias_noise)
             )
 
         self.lossFn = nn.MSELoss()
@@ -133,6 +139,12 @@ class CGF_ICNN(pl.LightningModule):
         loss = self.lossFn(self.forward(xs), ys)
         self.log('Val Loss', loss)
 
+        if self.hparams.resample_freq and \
+           ((self.current_epoch + 1) % self.hparams.resample_freq == 0):
+            # resample the training and validation data
+            print('resample', self.current_epoch+1, self.hparams.resample_freq)
+            self.setup()
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
@@ -141,7 +153,20 @@ class CGF_ICNN(pl.LightningModule):
         """ compute empirical CGF """
         num_points = torch.tensor(self.data.shape[0])
 
-        outs = torch.logsumexp(self.data @ ts.T, 0) - torch.log(num_points)
+        def find_eCGF(params):
+            return torch.logsumexp(self.data @ params.T, 0) - torch.log(num_points)
+
+        # batch out the computations if necessary
+        max_intermediate_elements = int(1E10) / self.data.element_size()
+        max_rows = int(max_intermediate_elements / num_points)
+
+        if ts.shape[0] < max_rows:
+            outs = find_eCGF(ts)
+        else:
+            t_splits = torch.split(ts, max_rows)
+            outs_splits = list(map(find_eCGF, t_splits))
+            outs = torch.concat(outs_splits)
+
         return outs
 
     def setup(self, stage=None):
@@ -149,7 +174,7 @@ class CGF_ICNN(pl.LightningModule):
             for our dataset.
         """
 
-        # first, we need to determine the t values that we want to sample. 
+        # first, we need to determine the t values that we want to sample.
         N_dims = self.data.shape[1]
 
         def search_width(n_axis):
@@ -195,7 +220,7 @@ class CGF_ICNN(pl.LightningModule):
                 width = search_width(dim)
                 dim_variances.append((width/1.5)**2)  # width is two standard deviations
         else:
-            dim_variances = [self.hparams.variance, self.hparams.variance]
+            dim_variances = self.hparams.input_dim * [self.hparams.variance]
 
         self.ts = torch.tensor(
                                 multivariate_normal(np.zeros(N_dims), np.diag(dim_variances)
@@ -207,20 +232,18 @@ class CGF_ICNN(pl.LightningModule):
             self.ts = self.ts[:, None]
 
         self.CGFs = self.empirical_CGF(self.ts)[:, None]
-        if self.hparams.simple_target:
-            # alternative, simple training data
-            self.CGFs = (self.ts**2).sum(1).detach()[:, None]
 
         # set up the datasets
         full_dataset = TensorDataset(self.ts, self.CGFs)
         self.train_split, self.val_split = random_split(
-            full_dataset, (0.8, 0.2))
+            full_dataset, (0.95, 0.05))
 
     def train_dataloader(self):
+        print('reload')
         return DataLoader(self.train_split,
                           batch_size=self.hparams.batchsize,
                           shuffle=True,
-                          num_workers=2,
+                          num_workers=10,
                           persistent_workers=True
                           )
 
