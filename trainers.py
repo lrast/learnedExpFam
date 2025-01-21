@@ -25,7 +25,6 @@ def train_model(model, directory, log_wandb=True, project='learnedExpFam',
     if resample_freq:
         trainer_params['reload_dataloaders_every_n_epochs'] = resample_freq
 
-
     earlystopping_callback = EarlyStopping(monitor='Val Loss', mode='min', 
                                            patience=trainer_params.pop('patience')
                                            )

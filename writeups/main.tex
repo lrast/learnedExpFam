@@ -39,7 +39,7 @@
 
 The cumulant generating function plays an important role in classical approaches to distribution approximation and adaptation.
 As a convex function, the CGF produces a family of related distributions, while its convex conjugate gives a density approximation.
-We leverage this classical theory by learning neural network representations of the cumulant generating functions, which we apply to change detection and adaptation problems.
+We leverage this classical theory by learning neural network representations of the cumulant generating functions, using input convex neural networks which we apply to change detection and adaptation problems.
 Taking advantage of the neural network representation, we additionally learn a cumulant generating function representations of class-conditional distributions, allowing for application of Bayesian inference under label shift.
 We apply these techniques to track the internal statistics of neural networks, thereby detecting and adapting the networks to distribution shifts.
 
@@ -68,6 +68,21 @@ At the moment, this comes down to the fact that we can produce networks that cap
 
 Honestly though, if we want any hope of this being useful to other people, we also need to demonstrate: 1. that CGF networks can actually be trained in high dimensions, and 2. that empirical CGFs work well to capture the statistic, even in high dimensions.
 
+One critical thing that I need to demonstrate for this problem is the fidelity of the method for different tasks, and the behavior of the learned CGF under different conditions. 
+This is probably the most important issue. Even more so than than coming up with different / novel methods for adjusting the networks. That said, a Bayesian adjustment based on the distribution is still appealing.
+
+
+The core thing is: What are my actual claims?
+\begin{itemize}
+  \item Empirical CGFs can be leveraged for both domain adaptation and out-of-distribution detection
+  \item ICNNs learn representations of the eCGF for both: marginal and class conditional cases, with class conditional being unique to the neural network representation
+  \item Saddlepoint approximations perform well for change detection.
+  \item Exponential tilting performs well for adaptation.
+\end{itemize}
+
+
+
+
 
 \section{Introduction and Background}
 
@@ -94,7 +109,7 @@ Starting from a baseline distribution $h(x)$, with cumulant generating function 
   p(x | \theta) = h(x) e^{\theta^T x - A(\theta)}. \label{def:exponential_tilt}
 \end{equation}
 This is a natural exponential family of distributions, each of which modifies the base measure $h(x)$ by concentrating the probability density along different directions to different extents.
-The CGF can be used to produce the individual cumulant generating function for the each member of the family
+The CGF gives the cumulant generating functions for every member of the tilted family
 \begin{equation}
   A_\theta(t | \theta) = A(\theta + t) - A(\theta) \label{eq:CGF_family}
 \end{equation}
@@ -104,46 +119,26 @@ Thus, the mean of any distribution in the family is given by the Jacobian of the
 \end{equation}
 while the Hessian gives the covariance matrix, and so forth \cite{barndorff2014information}.
 
-The CGF also gives access to the saddlepoint approximation \cite{daniels_saddlepoint_1954} to the probability density of the mean of $n$ independent random variables
+Another application of the CGF is saddlepoint approximation \cite{daniels_saddlepoint_1954,barndorff-nielsen_edgeworth_1979}.
+Given a distribution $h(x)$, with cumulant generating function $A(\theta)$, the saddlepoint approximates the distribution of sample means by
 \begin{equation}
-  p(\mu; n) \approx \frac{n}{2\pi}^{\frac{d}{2}} |V|^{-1/2} \exp(-n I(\mu)). \label{def:mean_density}
+  p(\mu; n) \approx \left( \frac{n}{2\pi} \right)^{\frac{d}{2}} |V|^{-1/2} \exp(-n I(\mu)). \label{def:mean_density}
 \end{equation}
-Where $n$ is the number of samples, $d$ is the dimensionality of the data, $V = {\bm H}[A](\theta(\mu))$ is covariance matrix given by the Hessian of the CGF, and $I(\mu)$ is the Legendre transform of $A(\theta)$,
+Where $\mu$ is the sample mean of $n$ samples in $d$ dimensions, $V$ is covariance matrix (given by the Hessian of the CGF), and $I(\mu)$ is the rate function.
+The \textit{rate function} is the Legendre transform of the cumulant generating function
 \begin{equation}
-  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
+  I(\mu) = \sup_{\theta}(\mu^T \theta  - A(\theta) ), \label{eq:legendre_transform}
 \end{equation}
-This function is called the \textit{rate function} in large deviations theory \cite{dembo2009large}, and Cramer's theorem shows that the saddlepoint approximation becomes asymptotically tight as $n \to \infty$ \cite{iltis_sharp_1995,chaganty_multidimensional_1986}.
-We will refer to $I(\mu)$ as the `rate function' in this work.
-Empirical CGF for rate functions, previous work
+and corresponds to the rate function in large deviations theory, by Cramer's Theorem \cite{dembo2009large}.
+The saddlepoint approximation becomes asymptotically tight as the number of datapoints increases \cite{iltis_sharp_1995,chaganty_multidimensional_1986}, but remains quite accurate at lower sample sizes \cite{davison_saddlepoint_1988,ronchetti_empirical_1994} as well.
 
-
-!!! Rewrite this paragraph. Instead of introducing through large deviations theory, use the saddle-point approximation, which becomes tight in the large deviations limit.
-Another application of the CGF concerns the theory of large deviations \cite{dembo2009large}, which describes the rate at which rare events become more and more unlikely as we collect more samples. 
-For a series of probability measures, $p_n$, large deviations theory gives a \textit{rate function}, $I(x)$ that, loosely speaking, satisfies
-\begin{equation}
-  p_n(x \in \Gamma) \sim \exp \left( - n \min_{x \in \Gamma} I(x) \right) \quad \textrm{as} \quad n \to \infty \label{def:large_deviations}
-\end{equation}
-for any measurable set $\Gamma$.
-That is, the probability of outcomes in the set $\Gamma$ shrinks exponentially with $n$ at a rate that is dominated by the smallest value of $I(x)$ on the set $\Gamma$ (see \cite{dembo2009large} for more precise expressions).
-In particular, if we consider the distribution of the average $\mu_n = \frac{1}{n} \sum_{i=1}^n X_i$ of $n$ i.i.d. data points in $\mathbb{R}^d$, Cramer's theorem \cite{dembo2009large}, gives the corresponding rate function
-\begin{equation}
-  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ). \label{eq:legendre_transform}
-\end{equation}
-The rate function is the Legendre transform of the cumulant generating function.
-This rate function also gives rise to an asymptotically tight (as $n \to \infty$) probability density over means \cite{iltis_sharp_1995,chaganty_multidimensional_1986}
-\begin{equation}
-  p(\mu; n) \approx \frac{n}{2\pi}^{\frac{d}{2}} |V|^{-1/2} \exp(-n I(\mu)). \label{def:mean_density}
-\end{equation}
-Where $n$ is the number of samples, $d$ is the dimensionality of the data, and $V = {\bm H}[A](\theta(\mu))$ is covariance matrix given by the Hessian of the CGF.
-
-
-To summarize these previous results, we have two related functions, $A(\theta) \leftrightarrow I(\mu)$, the cumulant generating function and rate function, 
-related through Legendre duality.
-Their arguments provide two related parameterizations $\theta \leftrightarrow \mu$ of the exponentially tilted family, corresponding to the natural parameter $\theta$ and the mean parameter, $\mu$.
+In summary, given a cumulant generating function, we have access to two related functions, $A(\theta) \leftrightarrow I(\mu)$, the CGF and the rate function, related through Legendre duality.
+Their arguments provide two related parameterizations $\theta \leftrightarrow \mu$ of the exponentially tilted family, corresponding to natural parameters $\theta$ and mean parameters, $\mu$.
 Due to the duality, these are related by 
 \begin{eqnarray}
   \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu). \label{eq:duality_relations}
 \end{eqnarray}
+The function pair allows detection of changes in sample means, through the saddlepoint distribution~(\ref{def:mean_density}), and adaptation of the distribution that models the the sampling process, through exponential tilting~(\ref{def:exponential_tilt}).
 
 
 \subsection{Neural network applications}
@@ -225,20 +220,16 @@ We train the CGF network to reproduce the values of the empirical cumulant gener
   \hat A(\theta) = \log \left( \frac{1}{N}\sum_{T_i} \exp(\theta^T T) \right), \label{def:empirical_CGF}
 \end{equation}
 which uses the empirical mean to evaluate the expectation in the CGF. 
-This expression has previously been used as a estimator for the CGF \cite{duffield_entropy_1995} [others ???]. 
+This expression is frequently used as a estimator for the CGF in the context of the saddlepoint approximation to both bootstrap \cite{davison_saddlepoint_1988} and ground truth \cite{ronchetti_empirical_1994} probability densities in uni- and multivariate contexts. 
 We train the CGF network by evaluating the expression (\ref{def:empirical_CGF}) across a variety of $\theta$ input values that we randomly sample, and training the network to replicate the value of $\hat A(\theta)$.
 See Section~\ref{sec:network_architecture} for full details of the network architecture and training.
 
 This procedure has two sources of error: error in the target empirical cumulant generating function relative to the ground truth cumulant generating function, and error in the approximation of the target empirical CGF by our neural network representation. 
 As shown in Figure~\ref{fig:1a_CGF_Normal}, for a simple case where $T$ is univariate normally distributed, there can be significant deviation between the ground truth and the empirical CGF, but the CGF network is able to capture the empirical CGF with a high degree of accuracy.
 This is because we have a limited number samples of $T$ with which to compute the empirical CGF, but we can evaluate the eCGF at as many $\theta$ training points as required when training the network representation.
-The deviations that we observe in Figure~\ref{fig:1a_CGF_Normal} between empirical and ground truth CGFs can be understood from Cramer's theorem in large deviations \cite{dembo2009large}:
-the slope of the eCGF is determined by the \textit{empirical} cumulative distribution function, and therefore becomes constant beyond a certain point.
+The deviations that we observe in Figure~\ref{fig:1a_CGF_Normal} between empirical and ground truth CGFs can be understood from Equation~\ref{def:empirical_CGF}: as $\theta$ gets large, the sum is increasingly dominated by only the term with the largest $T_i$ value.
+Alternatively, from Cramer's theorem in large deviations, the slope of the eCGF is determined by the \textit{empirical} cumulative distribution function, and therefore becomes constant beyond a certain point.
 The limiting slopes are dominated by the extreme observed values of the distribution.
-
-
-
-
 
 \begin{figure}[tb]
   \centering
@@ -259,19 +250,24 @@ The limiting slopes are dominated by the extreme observed values of the distribu
   \label{fig:1_CGF}
 \end{figure}
 
+\noindent \textbf{Questions and other things to write about:}
+\begin{itemize}
+  \item How many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction by the neural network features.
+  \item How well does the empirical CGF work as a normalizer?
+\end{itemize}
 
 
 
+\subsection{Duality}
 
-\newpage
-\subsection{Vanilla CGF contd}
-Question: how many training samples do I need as a function of dimensionality to learn the CGF? This could be an argument for using the dimensionality reduction by the neural network features.
+Given the CGF network representation of $A(\theta)$, we can also evaluate the rate function $I(\mu)$ and transform $\theta \leftrightarrow \mu$ between equivalent values of the natural and moment parameters.
+Following equation~(\ref{eq:duality_relations}), we compute the mean parameters $\mu(\theta)$ using the Jacobian of the neural network. 
+Evaluation of $I(\mu)$ and $\mu(\theta)$ both come down to evaluating the Legendre transform (Eq.~\ref{eq:legendre_transform}), which we do by directly solving the optimization problem using gradient descent in $\theta$.
+The resulting optimal input gives $\theta(\mu)$, while the optimal value is $I(\mu)$.
+Note that more sophisticated optimization approaches are also available.
 
-How well does the empirical CGF work as a normalizer?
 
-\subsubsection{Duality}
 Evaluation of how well the learned functions capture the duality relationships.
-
 
 
 
@@ -287,9 +283,7 @@ Important to note, the rate function pdf has no probability density outside of t
 
 
 
-\subsection{Class conditional parameterization}
-
-Everything up to this point can be accomplished using the empirical CGF in place of a CGF network.
+\subsection{Target Class conditional parameterization}
 
 Instead of learning a CGF representation of the distribution of $T(x)$ as a whole, we can alternatively try to learn a CGF representation that captures the class conditional distributions, $p(T|y)$.
 In order to do this, we assume a target-to-parameter mapping, $\theta(y)$, which we take as given, and fit $A(\theta)$ to ensure that exponentially tilted distributions
@@ -334,9 +328,16 @@ In this work, we assume a specified target-to-parameter mapping, $\theta(y)$.
 Learning such a mapping together with the CGF is an important future direction.
 
 
-Question: how well does this work for different $\theta(y)$
+\noindent \textbf{Notes and Questions}
+\begin{itemize}
+  \item Everything up to this point can be accomplished using the empirical CGF in place of a CGF network.
+  \item How well does this work for different $\theta(y)$?
+  \item How does the accuracy of the marginal depend on the assumptions about $\theta(y)$?
+\end{itemize}
 
-Question: how does the accuracy of the marginal depend on the assumptions about $\theta(y)$
+
+
+
 
 
 \newpage
@@ -370,7 +371,7 @@ We can use the learned CGF network to correct for changes in input statistics in
 
 \noindent \textbf{Fine-tuning:} Following the approach of \cite{maity_understanding_2023}, we model the new feature distribution as an exponentially tilted version (\ref{def:exponential_tilt}) of the training distribution  under some values $\hat \theta$ of the parameters.
 Given parameters $\hat \theta$, the exponential tilt equation gives importance weights ${\exp(\hat \theta^T T - A(\hat \theta))}$, which we use to fine-tune the network by training on the original training data, with each point weighted by its importance value under the new feature distribution.
-This requires determining the values of the parameters $\hat \theta$, which we can accomplish using the duality in Equation~(\ref{eq:duality_relations}) based on the observed mean value of the sufficient statistic ${\hat \mu = \frac{1}{n} \sum_i T_i}$ and the learned CGF, as we discuss in Section~\ref{sec:duality_computation}.
+This requires determining the values of the parameters $\hat \theta$, which we accomplish using the duality in Equation~(\ref{eq:duality_relations}) based on the observed mean value of the sufficient statistic ${\hat \mu = \frac{1}{n} \sum_i T_i}$ and the learned CGF network, as discussed above.
 In order to avoid having the retrain the CGF network, we freeze the weights of the original network $\mathcal{N}_0$ below our hidden layer of interest, and fine-tune the top half of the network.
 Update the value of the parameter to match...
 
@@ -418,28 +419,7 @@ Given such a CGF, we
 
 
 \newpage
-\subsection{Adaptation Through Fine tuning}
 
-
-
-
-
-\subsection{Target conditional CGF}
-
-
-
-
-
-\subsection{Adaptation Through Activity Remapping}
-
-
-
-
-
-
-\subsection{Measurement of Fisher Information}
-
-Establish the method for measuring the Fisher information of data. In particular, with respect to changes in a known parameter, which can be trained.
 
 
 
@@ -455,28 +435,28 @@ This is the path that we pursue in this paper: we will learn exponential familie
 
 
 \section{Methods}
-\subsection{CGF Network architecture and training} \label{sec:network_architecture}
+\subsection{CGF Network} \label{sec:network_architecture}
 
-We fit the empirical cumulant generating functions using input convex neural networks \cite{amos_input_2017}, which are guaranteed to learn convex functions.
+The CGF network is an input convex neural network \cite{amos_input_2017}, with convex non-linearities and positive weights after the first layer.
 We use a multi-layer perceptron with no skip connections, but with positive weight matrices initialized as in \cite{hoedt_principled_2023}, and guaranteed to be positive by a ReLU applied to the weights.
 For non-linearities, we use a leaky version of a softplus, given by $sp_{\textrm{leaky}}(x) = \alpha x + (1 - \alpha) sp(x) + c_0$ where $sp(x)$ is a softplus function, $\alpha$ sets the leak slope for negative values, and $c_0$ sets the intercept. 
-These values are set by hyper-parameter sweep (???). 
+These values are set to $\alpha =0.05$ and $c_0 = -0.693$, which sets the intercept to be the origin. 
 The leaky softplus non-linearity has appealing properties:
 It is convex and continuously differentiable to at least second order, giving smooth Jacobians and Hessians.
 It retains benefits of leaky ReLUs in preventing dead units.
 Finally, it allows negative values to pass through the network, which is particularly important in the ICNN case, where the network weights are constrained to be positive.
+We use three hidden layers, with widths of 200.
+
+We generate the values of $\theta$ for the training set by sampling vectors with uniform orientations and lengths that are distributed according to a $\chi_1$ distribution, analogous to a univariate normal distribution.
+The scale of the length distribution is set to $\sqrt{5}$.
+This sampling method ensures that our samples are concentrated around the origin, avoiding the well-known issue with multivariate normal distributions in high dimensions, whose marginal length distribution shows a mean that increases with dimensionality.
+
 
 \noindent \textbf{Questions / To Do:}
 What size of networks do we need to fit higher dimensional data?
 How do we generate the dual samples for training.
 
 
-\subsection{Duality Computations} \label{sec:duality_computation}
-Given a neural network representation of the cumulant generating function $A(\theta)$, we want to be able to transform between parameter and moment representations $\theta \leftrightarrow \mu$, and to evaluate both CGF and rate function values, $A(\theta)$ and $I(\mu)$.
-Using the trained network, $A(\theta)$ is directly computed by evaluation, while the parameter to moment mapping $\mu(\theta)$ is given by its Jacobian (Eq.~\ref{eq:duality_relations}).
-Evaluation of $I(\mu)$ and $\mu(\theta)$ both come down to evaluating the Legendre transform (Eq.~\ref{eq:legendre_transform}). 
-We directly solve the optimization problem by gradient descent in $\theta$, with the resulting optimal input giving $\theta(\mu)$, while the optimal value is $I(\mu)$.
-This works well enough for our purposes, but more sophisticated optimization and differential equations based approaches can also be applied.
 
 
 \subsection{Model networks} \label{sec:model_network_details}
@@ -493,6 +473,49 @@ This achieves 96\% validation and ???\% test accuracy.
 
 
 \section{OLD MATERIAL}
+
+ and $I(\mu)$ is the Legendre transform of $A(\theta)$,
+\begin{equation}
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ).
+\end{equation}
+This function is called the \textit{rate function} in large deviations theory \cite{dembo2009large}, and shows that the saddlepoint approximation becomes asymptotically tight as.
+We will refer to $I(\mu)$ as the `rate function' in this work.
+Empirical CGF for rate functions, previous work
+
+
+
+This saddlepoint approximation is used in classical statistic \cite{daniels_saddlepoint_1954,barndorff-nielsen_edgeworth_1979,davison_saddlepoint_1988,ronchetti_empirical_1994}, and has been shown in large deviations theory \cite{dembo2009large} to be asymptotically tight as $n \to \infty$ \cite{iltis_sharp_1995,chaganty_multidimensional_1986}.
+Note that the rate function, which inherits its name from its role in large deviations theory, is the Legendre transform of the cumulant generating function and, as a result of convexity, these functions are dual.
+
+
+
+
+!!! Rewrite this paragraph. Instead of introducing through large deviations theory, use the saddle-point approximation, which becomes tight in the large deviations limit.
+Another application of the CGF concerns the theory of large deviations \cite{dembo2009large}, which describes the rate at which rare events become more and more unlikely as we collect more samples. 
+For a series of probability measures, $p_n$, large deviations theory gives a \textit{rate function}, $I(x)$ that, loosely speaking, satisfies
+\begin{equation}
+  p_n(x \in \Gamma) \sim \exp \left( - n \min_{x \in \Gamma} I(x) \right) \quad \textrm{as} \quad n \to \infty 
+\end{equation}
+for any measurable set $\Gamma$.
+That is, the probability of outcomes in the set $\Gamma$ shrinks exponentially with $n$ at a rate that is dominated by the smallest value of $I(x)$ on the set $\Gamma$ (see \cite{dembo2009large} for more precise expressions).
+In particular, if we consider the distribution of the average $\mu_n = \frac{1}{n} \sum_{i=1}^n X_i$ of $n$ i.i.d. data points in $\mathbb{R}^d$, Cramer's theorem \cite{dembo2009large}, gives the corresponding rate function
+\begin{equation}
+  I(\mu) = \sup_{\theta}( \theta \mu - A(\theta) ).
+\end{equation}
+The rate function is the Legendre transform of the cumulant generating function.
+This rate function also gives rise to an asymptotically tight (as $n \to \infty$) probability density over means \cite{iltis_sharp_1995,chaganty_multidimensional_1986}
+\begin{equation}
+  p(\mu; n) \approx \frac{n}{2\pi}^{\frac{d}{2}} |V|^{-1/2} \exp(-n I(\mu)). 
+\end{equation}
+Where $n$ is the number of samples, $d$ is the dimensionality of the data, and $V = {\bm H}[A](\theta(\mu))$ is covariance matrix given by the Hessian of the CGF.
+
+
+
+\subsection{Measurement of Fisher Information}
+
+Establish the method for measuring the Fisher information of data. In particular, with respect to changes in a known parameter, which can be trained.
+
+
 
 The Fisher information matrix for this family is given by the Hessian of $A(\theta)$ 
 \begin{equation}

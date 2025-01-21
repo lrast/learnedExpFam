@@ -29,9 +29,10 @@ class BaselineAdaptable(pl.LightningModule):
         """ make a dataset of the activity of a given layer in the model """
         dl = DataLoader(data, batch_size=len(data))
         inputs, targets = next(iter(dl))
+        inputs = inputs.to(self.device)
         model_activity = self.model[0:(self.layer_ind+1)](inputs).detach()
 
-        return TensorDataset(model_activity, targets)
+        return TensorDataset(model_activity.to('cpu'), targets)
 
     def make_weighted_loss(self, baseline_loss):
         loss_expanded = baseline_loss(reduction='none')
