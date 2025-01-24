@@ -26,7 +26,7 @@
 \usepackage{setspace}
 
 \begin{document}
-\title{Learned Cumulant Generating Functions for Efficient Adaptation of Neural Network Statistics}
+\title{Cumulant Generating Function Networks for Adaptation of Neural Network Statistics}
 \author{Luke Rast}
 \maketitle
 
@@ -37,28 +37,18 @@
 
 \section{Abstract}
 
-The cumulant generating function plays an important role in classical approaches to distribution approximation and adaptation.
-As a convex function, the CGF produces a family of related distributions, while its convex conjugate gives a density approximation.
-We leverage this classical theory by learning neural network representations of the cumulant generating functions, using input convex neural networks which we apply to change detection and adaptation problems.
-Taking advantage of the neural network representation, we additionally learn a cumulant generating function representations of class-conditional distributions, allowing for application of Bayesian inference under label shift.
-We apply these techniques to track the internal statistics of neural networks, thereby detecting and adapting the networks to distribution shifts.
+Neural network performance suffers when input statistics differ between training and application data.
+The cumulant generating function provides access to classical methods for detecting and adapting to distributional changes.
+We learn cumulant generating functions that capture the statistics of internal layers in a trained neural network, and apply them to change detection and adaptation of the network.
+Specifically, we learn an input convex neural network representation of the cumulant generating function, and use saddlepoint approximation for change detection and exponential tilting for adaptation.
+Taking advantage of the neural network representation, we also learn a cumulant generating function representation of target-conditional distributions, allowing for application of Bayesian inference under label shift.
+We demonstrate these methods on simple examples.
 
 
 
-\section{Brainstorming}
-Reformulate
+TLDR: Learning a neural network representation of the cumulant generating function provides access to simple methods for detecting and adapting to distribution shifts that can be applied to internal layers of neural networks.
 
-Leveraging duality 
 
-Leveraging learned CGF
-
-Learn the cumulant generating function, and leverage it's properties, in particular duality to the rate function.
-
-\begin{itemize}
-  \item Learned CGF fits distributional families and it fits them well.
-  \item Learned CGF facilitates change point detection via: multiple test possibilities
-  \item Learned CGF facilitates adaptation via: multiple adaptation possibilities
-\end{itemize}
 
 \section{Overview}
 
@@ -524,6 +514,44 @@ The Fisher information matrix for this family is given by the Hessian of $A(\the
 
 The parameter $\mu$ is the derivative of the CGF, and therefore is equal to the average value of $T$ for data generated from the corresponding distribution $p(T|\theta)$.
 Thus, $I(\mu)$ is a function of observation \textit{averages}.
+
+\subsection{Abstract material}
+
+
+The cumulant generating function plays an important role in classical approaches to distribution approximation and adaptation.
+As a convex function, the CGF produces a family of related distributions, while its convex conjugate gives a density approximation.
+We leverage this classical theory by learning neural network representations of the cumulant generating functions, using input convex neural networks which we apply to change detection and adaptation problems.
+Taking advantage of the neural network representation, we additionally learn a cumulant generating function representations of class-conditional distributions, allowing for application of Bayesian inference under label shift.
+We apply these techniques to track the internal statistics of neural networks, thereby detecting and adapting the networks to distribution shifts.
+
+
+
+
+\section{Other}
+By leaning input convex neural network representation of the cumulant generating function, 
+
+
+The performance of neural network models can suffer from changes in input statistics between training and application data.
+
+Classical statistical approaches to distribution approximation and adaptation feature the cumulant generating function, a convex function that produces
+Crucially, the neural network representation also allows us to learn e
+
+
+
+\section{Brainstorming}
+Reformulate
+
+Leveraging duality 
+
+Leveraging learned CGF
+
+Learn the cumulant generating function, and leverage it's properties, in particular duality to the rate function.
+
+\begin{itemize}
+  \item Learned CGF fits distributional families and it fits them well.
+  \item Learned CGF facilitates change point detection via: multiple test possibilities
+  \item Learned CGF facilitates adaptation via: multiple adaptation possibilities
+\end{itemize}
 
 
 \bibliography{main.bib}

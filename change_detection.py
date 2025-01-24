@@ -18,21 +18,24 @@ class ScoreTest(object):
         self.n_samples = n_samples
         self.pvalue = pvalue
 
+        self.n_dims = cgf_model.data.shape[1]
+
     def is_different(self, data):
         """ Determine whether this data represents a significant deviation
             from the baseline theta = 0
         """
-        n_samples, n_dims = data.shape
+        if data.shape[0] != self.n_samples:
+            raise Exception("Incorrect number of samples")
 
-        model_mean = self.cgf_model.jac(torch.zeros(1, 2))[0].detach()
-        model_cov = self.cgf_model.hess(torch.zeros(1, 2))[0].detach()
+        model_mean = self.cgf_model.jac(torch.zeros(1, self.n_dims))[0].detach()
+        model_cov = self.cgf_model.hess(torch.zeros(1, self.n_dims))[0].detach()
 
         emp_mean = data.mean(0)
 
-        score = (1./n_samples) * (emp_mean - model_mean).T @ \
+        score = (1./self.n_samples) * (emp_mean - model_mean).T @ \
             torch.linalg.inv(model_cov) @ (emp_mean - model_mean)
 
-        return chi2(n_dims).cdf(score) > self.pvalue
+        return chi2(self.n_dims).cdf(score) > self.pvalue
 
 
 class RateFunctionTest(object):
@@ -146,6 +149,7 @@ def binary_search_threashold(empirical_p, pval, guess=1, delta=0.01,  Nmax=1000)
     threashold = guess
     
     for i in range(Nmax):
+        print(mag_bounds, p_bounds)
         frac = empirical_p(threashold)
         if frac > pval and frac < p_bounds[1]:
             mag_bounds[1] = threashold

@@ -9,8 +9,7 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 from torch.func import vmap, jacrev, hessian
 
 from convex_initialization import ConvexLinear
-from cgf_components import normal_radius_uniform_angle, LeakySoftplus, \
-                           n_distant_points
+from cgf_components import normal_radius_uniform_angle, LeakySoftplus
 
 
 class CGF_ICNN(pl.LightningModule):
@@ -22,6 +21,7 @@ class CGF_ICNN(pl.LightningModule):
         super(CGF_ICNN, self).__init__()
 
         # setup and apply data transformation 
+        # !!! needs work: the mean and variance should be saved and loaded with the modeel
         mu = data_to_model.mean()
         stdev = data_to_model.var()**0.5
         self.transform_data = lambda x: (x - mu) / stdev
@@ -112,9 +112,9 @@ class CGF_ICNN(pl.LightningModule):
             return -(torch.einsum('Nk, Nk -> N', p, x) - self.fwd_cpu(x).squeeze())
 
         input_val = Parameter(torch.zeros(p.shape))
-        optimizer = optim_method((input_val,), lr=1)
+        optimizer = optim_method((input_val,), lr=1E-3)
         
-        for step in range(200):
+        for step in range(500):
             curr_val = optimizer.param_groups[0]['params'][0]
             optimizer.zero_grad()
             
@@ -225,7 +225,6 @@ class ConditionalCGF(CGF_ICNN):
        while fitting the CGF
     """
     def __init__(self, dataset_to_model, sample_theta=normal_radius_uniform_angle,
-                 parameter_embedding=n_distant_points,
                  **kwargs):
         # split data and targets
         data, targets = dataset_to_model[:]
@@ -233,7 +232,6 @@ class ConditionalCGF(CGF_ICNN):
                                              **kwargs)
 
         self.targets = targets
-        self.parameter_embedding = parameter_embedding
 
         # subclass specific hyperparameters
         hyperparameters = {'parameter_radius': 1.0}
@@ -241,16 +239,33 @@ class ConditionalCGF(CGF_ICNN):
                                for k in hyperparameters.keys() & kwargs.keys())
         self.save_hyperparameters(hyperparameters)
 
+    # training with a two input dataloader
+    def training_step(self, batch, batchidx):
+        parameters, ts, targets = batch
+        conditionalCGF = self.forward(parameters + ts) - self.forward(parameters)
+
+        loss = self.lossFn(conditionalCGF, targets)
+        self.log('Train Loss', loss)
+        return loss
+
+    def validation_step(self, batch, batchidx):
+        parameters, ts, targets = batch
+        conditionalCGF = self.forward(parameters + ts) - self.forward(parameters)
+
+        loss = self.lossFn(conditionalCGF, targets)
+        self.log('Val Loss', loss)
+
     # parameter functions
     def make_parameters(self, targets):
         """ Describes how the parameters of the network vary with the target.
 
-            For now, this is an input.0
+            For now, this is an input.
 
             Assume discrete target values
         """
 
-
+        targets = targets.squeeze()
+        """
         hardcoded = torch.tensor([[-1.0000e+00,  8.7423e-08],
                                     [-8.6603e-01, -5.0000e-01],
                                     [-5.0000e-01, -8.6603e-01],
@@ -263,12 +278,11 @@ class ConditionalCGF(CGF_ICNN):
                                     [-4.3711e-08,  1.0000e+00],
                                     [-5.0000e-01,  8.6603e-01],
                                     [-8.6603e-01,  5.0000e-01]])
-
-
-        targets = targets.squeeze()
-        radius = self.hparams.parameter_radius
-        #angles = self.parameter_angles[targets]
         angles = hardcoded[targets]
+        """
+
+        radius = self.hparams.parameter_radius
+        angles = self.parameter_angles[targets]
 
         return radius * angles
 
@@ -294,6 +308,8 @@ class ConditionalCGF(CGF_ICNN):
     def setup(self, stage=None):
         """ Generate samples of the empirical moment generating function
             for our dataset.
+
+            Currently: align parameters with mean
         """
         # debug code
         try:
@@ -306,30 +322,33 @@ class ConditionalCGF(CGF_ICNN):
         possible_targets = torch.unique(targets, dim=0)
 
         # setup the parameter embedding
-        self.parameter_angles = self.parameter_embedding(len(possible_targets),
-                                                         self.hparams.input_dim
-                                                         )
+        self.parameter_angles = torch.zeros(len(possible_targets),
+                                            self.hparams.input_dim)
 
         all_CGF_values = []
 
         for target in possible_targets:
-            parameter = self.make_parameters(target)
-            inds = (targets == target).all(1)
+            inds = (targets == target).squeeze()
             data_select = self.data[inds]
 
             ts = self.sample_dual_training()
-            CGF_value = self.empirical_CGF(ts, data=data_select)[:, None]
+            CGF_values = self.empirical_CGF(ts, data=data_select)[:, None]
 
-            tilted_ts = ts + parameter
+            angle = data_select.mean(0)
+            angle = angle / torch.norm(angle)
+            self.parameter_angles[target] = angle
+            parameter = self.hparams.parameter_radius * angle
+            parameters = parameter.repeat(ts.shape[0], 1)
 
-            all_CGF_values.append(torch.cat([tilted_ts, CGF_value], dim=1))
+            all_CGF_values.append(torch.cat([parameters, ts, CGF_values], dim=1))
 
         full_train = torch.cat(all_CGF_values, dim=0)
 
         CGFs = full_train[:, -1:]
-        parameters = full_train[:, 0:-1]
+        parameters = full_train[:, 0:self.hparams.input_dim]
+        ts = full_train[:, self.hparams.input_dim:2*self.hparams.input_dim]
 
         # set up the datasets
-        full_dataset = TensorDataset(parameters, CGFs)
+        full_dataset = TensorDataset(parameters, ts, CGFs)
         self.train_split, self.val_split = random_split(
             full_dataset, (0.8, 0.2))

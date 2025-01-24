@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor, Compose, Normalize
 
-from baseline_adaptable import BaselineAdaptable
+from models.baseline_adaptable import BaselineAdaptable
 
 from functools import partial
 
