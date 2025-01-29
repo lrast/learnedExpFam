@@ -102,7 +102,7 @@ class RateFunctionTest(object):
 #
 #
 
-def importance_sample(func, target_pdf, sample_dist, N=10000,
+def importance_sample(func, target_pdf, sample_dist, N=100000,
                       weight_norm=True, resample=False):
     """
         Fully feaured importance sampling, for p-threashold evaluation
@@ -151,11 +151,11 @@ def binary_search_threashold(empirical_p, pval, guess=1, delta=0.01,  Nmax=1000)
     for i in range(Nmax):
         print(mag_bounds, p_bounds)
         frac = empirical_p(threashold)
-        if frac > pval and frac < p_bounds[1]:
+        if frac > pval and frac <= p_bounds[1]:
             mag_bounds[1] = threashold
             p_bounds[1] = frac
             
-        elif frac < pval and frac > p_bounds[0]:
+        elif frac < pval and frac >= p_bounds[0]:
             mag_bounds[0] = threashold
             p_bounds[0] = frac
 

@@ -3,7 +3,7 @@ import numpy as np
 import pytorch_lightning as pl
 
 from torch import nn
-from torch.nn import Parameter, parallel
+from torch.nn import Parameter
 
 from torch.utils.data import TensorDataset, DataLoader, random_split
 from torch.func import vmap, jacrev, hessian
@@ -15,21 +15,16 @@ from cgf_components import normal_radius_uniform_angle, LeakySoftplus
 class CGF_ICNN(pl.LightningModule):
     """ Input convex neural network implementation for learning 
         cumulant generating functions
+
+        To do: remove resampling when I'm sure that I'm not going to use it anymore
     """
     def __init__(self, data_to_model, sample_theta=normal_radius_uniform_angle,
                  **kwargs):
         super(CGF_ICNN, self).__init__()
 
-        # setup and apply data transformation 
-        # !!! needs work: the mean and variance should be saved and loaded with the modeel
-        mu = data_to_model.mean()
-        stdev = data_to_model.var()**0.5
-        self.transform_data = lambda x: (x - mu) / stdev
-        self.data = self.transform_data(data_to_model).detach().clone()
-
-        input_dim = data_to_model.shape[1]
-
         self.sample_theta = sample_theta
+        self.data = data_to_model.detach().clone()
+        input_dim = data_to_model.shape[1]
 
         hyperparameterValues = {
             # seed
@@ -101,18 +96,19 @@ class CGF_ICNN(pl.LightningModule):
         return H(ts)[:, 0, :, :]
 
     # dual functions
-    def dual_opt(self, p, optim_method=torch.optim.Adam):
+    def dual_opt(self, p, optim_method=torch.optim.Adam, **optkwargs):
         """
             Solve the dual optimization problem.
 
-            Note that issues will arise if the desired slope is not achieved
+            Note that issues may arise if the desired slope is not achieved
             by the CGF
         """
         def to_minimize(x):
             return -(torch.einsum('Nk, Nk -> N', p, x) - self.fwd_cpu(x).squeeze())
 
         input_val = Parameter(torch.zeros(p.shape))
-        optimizer = optim_method((input_val,), lr=1E-3)
+        opt_params = {**{'lr': 1E-3}, **optkwargs}
+        optimizer = optim_method((input_val,), **opt_params)
         
         for step in range(500):
             curr_val = optimizer.param_groups[0]['params'][0]
@@ -193,9 +189,6 @@ class CGF_ICNN(pl.LightningModule):
 
         self.thetas = self.sample_theta(N_dims, variance**0.5
                                         ).rvs(self.hparams.numsamples)
-
-        if N_dims == 1:  # edge case
-            self.thetas = self.thetas[:, None]
 
         self.CGFs = self.empirical_CGF(self.thetas)[:, None]
 

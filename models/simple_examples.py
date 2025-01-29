@@ -78,10 +78,18 @@ class Basic_MNIST(BaselineAdaptable):
     # data
     def setup(self, stage=None):
         """generate the datasets"""
+        try:  # skip reinitialize
+            a = self.data_train
+            return
+        except AttributeError:
+            print('setup called')
+            pass
+
         mnist_data = MNIST('~/Datasets/', download=True, transform=Compose(
                           [ToTensor(), Normalize(0., 1.),
                            partial(torch.reshape, shape=(-1,))
                            ]))
+
         self.data_train, self.data_val = random_split(mnist_data, (0.9, 0.1))
 
     def train_dataloader(self):
