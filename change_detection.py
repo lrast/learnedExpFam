@@ -102,7 +102,7 @@ class RateFunctionTest(object):
 #
 #
 
-def importance_sample(func, target_pdf, sample_dist, N=100000,
+def importance_sample(func, target_pdf, sample_dist, N=10000,
                       weight_norm=True, resample=False):
     """
         Fully feaured importance sampling, for p-threashold evaluation
