@@ -14,7 +14,7 @@
 \usepackage[switch]{lineno}
 \usepackage{hyperref}
 
-\usepackage{icml2025}
+\usepackage[accepted]{icml2025}
 
 
 \newcommand{\cov}{\mathrm{cov}}
@@ -34,8 +34,8 @@
 
 \vskip 0.3in
 ]
-\printAffiliationsAndNotice{}
-
+%\printAffiliationsAndNotice{}
+%\linenumbers
 
 \begin{abstract}
   Neural network performance suffers when input statistics differ between training and application data.
@@ -84,9 +84,10 @@ We use exponential tilting to model neural network activity in different input c
 Another application of the CGF is saddlepoint approximation \cite{daniels_saddlepoint_1954,barndorff-nielsen_edgeworth_1979}.
 Given a distribution $h(x)$, with cumulant generating function $A(\theta)$, the saddlepoint approximates the distribution of sample means by
 \begin{equation}
-  p(\mu; n) \approx \left( \frac{n}{2\pi} \right)^{d\frac{d}{2}} |V(\mu)|^{-1/2} \exp(-n I(\mu)). \label{def:mean_density}
+  p(\mu; n) \approx \left( \frac{n}{2\pi} \right)^{\frac{d}{2}} |V(\mu)|^{-1/2} \exp(-n I(\mu)) \label{def:mean_density}
 \end{equation}
-Where $\mu$ is the sample mean of $n$ samples in $d$ dimensions, $V(\mu)$ is covariance matrix (given by the Hessian of the CGF), and $I(\mu)$ is the rate function.
+see also \cite{reid_saddlepoint_1988,mccullagh2018tensor}.
+Where $\mu$ is the sample mean of $n$ samples in $d$ dimensions, $V(\mu)$ is the covariance matrix (given by the Hessian of the CGF), and $I(\mu)$ is the rate function.
 The \textit{rate function} is the Legendre transform of the cumulant generating function
 \begin{equation}
   I(\mu) = \sup_{\theta}(\mu^T \theta  - A(\theta) ), \label{eq:legendre_transform}
@@ -101,7 +102,7 @@ Due to the duality, these are related by
 \begin{eqnarray}
   \mu = \nabla_\theta A(\theta) & \theta = \nabla_\mu I(\mu). \label{eq:duality_relations}
 \end{eqnarray}
-The function pair allows detection of changes in sample means, through the saddlepoint distribution~(\ref{def:mean_density}), and adaptation of the distribution that models the the sampling process, through exponential tilting~(\ref{def:exponential_tilt}).
+The function pair allows detection of changes in sample means, through the saddlepoint distribution~(\ref{def:mean_density}), and adaptation of the distribution that models the sampling process, through exponential tilting~(\ref{def:exponential_tilt}).
 
 We apply these dual functions to the twin problems of change detection and adaptation.
 On one side of this duality, the rate function $I(\mu)$, gives the probability density over the mean of many samples.
@@ -142,7 +143,7 @@ On the Bayesian side, \cite{saerens_adjusting_2002} derived an expectation-maxim
 
 Our approach is similar in flavor to energy based modelling \cite{lecun_tutorial_2006}, which fits un-normalized log probabilities.
 In fact, the cumulant generating function that we fit here is what is often called the free energy, and resembles the normalization factor in these models, which is intractable in many cases.
-The distinguishing factor for this particular case is the fact the the model is like an exponential family, in that the parameters and inputs only interact linearly in the energy term.
+The distinguishing factor for this particular case is the fact that the model is like an exponential family, in that the parameters and inputs only interact linearly in the energy term.
 This grants us tractability through the cumulant generating function interpretation.
 
 
@@ -225,7 +226,7 @@ In other words, we impose a requirement on the learned $A(\theta)$ that exponent
 
 We do this using Equation (\ref{eq:CGF_family}) for the cumulant generating function of tilted distributions.
 For every target class $y_i$, the tilted CGF $A_{\theta(y_i)}(\phi | \theta(y_i))$ should match the CGF of the data with label $y_i$.
-In order accomplish this, we sample a variety of $\phi$ values for each target class and evaluate the \textit{class-conditional} empirical CGF $\hat A_{y_i}(\phi)$ using only data with label $y_i$.
+In order to accomplish this, we sample a variety of $\phi$ values for each target class and evaluate the \textit{class-conditional} empirical CGF $\hat A_{y_i}(\phi)$ using only data with label $y_i$.
 This produces the dataset $\{\phi_{i}, \theta(y_i), \hat A_{y_i}(\phi_i)\}$.
 We then train our conditional CGF network $A(\theta)$ to minimize the distance between ${A(\theta(y_i) + \phi_i ) - A(\theta(y_i))}$ and $\hat A_{y_i}(\phi_i)$.
 
